@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MoneroUSD Explorer</title>
+  <meta name="description" content="Sovereign block explorer for the MoneroUSD chain. Reads from your local wallet provider when available, otherwise from a federated list of community-run daemon RPCs and indexer mirrors." />
+
+  <!-- CSP — locks down to same-origin + the federated indexer/RPC
+       hosts the SPA queries. No CDN scripts, no eval. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data:;
+    connect-src 'self' https://*.monerousd.org;
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';
+  " />
+
+  <link rel="stylesheet" href="styles/theme.css" />
+</head>
+<body>
+  <header>
+    <a href="#/" class="brand">
+      <span class="brand-mark">M</span>
+      <span class="brand-name">MoneroUSD Explorer</span>
+    </a>
+    <nav>
+      <input id="search-input" type="search"
+        placeholder="Search block height, tx hash, address, tokenId, contractId…"
+        spellcheck="false" autocomplete="off" />
+    </nav>
+    <div class="status">
+      <span id="data-source-pill" class="pill">connecting…</span>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <footer>
+    <span class="footer-line">
+      MoneroUSD Explorer · sovereign + chain-derived ·
+      <a href="https://github.com/casdevmonero" rel="noopener">code</a> ·
+      <span id="footer-source"></span>
+    </span>
+  </footer>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
