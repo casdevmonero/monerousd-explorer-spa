@@ -4,15 +4,14 @@
 // (token transfers, LP ops, bridge ops, DC calls, site publishes,
 // validator bonds, governance proposals, BINARY_RELEASE, etc.).
 // The chain has zero-or-more attestations per tx; we surface them
-// with a deep-link to the relevant detail page.
-import { escapeHtml } from '../app.js';
+// with deep-links to the relevant detail page.
+//
+// Ported to the legacy detail-table design (monerousd-explorer/views/tx.ejs).
+import { escapeHtml, formatAmount, shortAddr, timeSince } from '../lib/helpers.js';
 
 const ATT_RE = /ion:\/\/op\/v1\?[^\s\0]+/g;
 
 function tryDecodeAttestation(extraStr) {
-  // A minimal decoder mirroring dapp-browser/attestation.js. We
-  // don't bring the full module in — we just want the op + payload
-  // for human display.
   try {
     if (!extraStr.startsWith('ion://op/v1?')) return null;
     const params = new URLSearchParams(extraStr.slice('ion://op/v1?'.length));
@@ -30,8 +29,6 @@ function tryDecodeAttestation(extraStr) {
 
 function extractAttestationsFromExtra(extraField) {
   if (!extraField) return [];
-  // tx_extra is a hex string in get_transactions output. Decode to
-  // bytes, convert to UTF-8 for the substring scan, regex-match.
   let bytes;
   if (typeof extraField === 'string') {
     if (/^[0-9a-fA-F]+$/.test(extraField) && extraField.length % 2 === 0) {
@@ -56,79 +53,100 @@ function extractAttestationsFromExtra(extraField) {
 }
 
 export async function renderTx({ ds, view }, hash) {
-  view.innerHTML = `<h1>Transaction</h1><div class="section" id="tx-body">Loading…</div>`;
-  const el = document.getElementById('tx-body');
-
   if (!/^[0-9a-fA-F]{64}$/.test(hash)) {
-    el.innerHTML = '<div class="error">Not a valid 32-byte tx hash.</div>';
+    view.innerHTML = `<div class="error-box"><strong>Error:</strong> Not a valid 32-byte tx hash.</div>`;
     return;
   }
 
+  let tx = null;
+  let txInfo = null;
+  let errorMsg = null;
   try {
     const r = await ds.getTransactions([hash]);
-    const tx = (r && (r.txs && r.txs[0])) || (r && r.txs_as_json && JSON.parse(r.txs_as_json[0])) || null;
-    if (!tx) { el.innerHTML = '<div class="error">Transaction not found.</div>'; return; }
-
-    const txInfo = tx.as_json ? JSON.parse(tx.as_json) : tx;
-    const fee = txInfo.rct_signatures?.txnFee ?? '—';
-    const block_height = tx.block_height ?? '—';
-    const inputCount = txInfo.vin?.length ?? '—';
-    const outputCount = txInfo.vout?.length ?? '—';
-
-    const attestations = extractAttestationsFromExtra(txInfo.extra ?? tx.extra);
-
-    el.innerHTML = `
-      <div class="kv">
-        <div class="k">Tx hash</div>
-        <div class="v mono">${escapeHtml(hash)}</div>
-        <div class="k">In block</div>
-        <div class="v mono">
-          ${block_height === '—' ? '— (in mempool)' : `<a href="#/block/${escapeHtml(String(block_height))}">${escapeHtml(String(block_height))}</a>`}
-        </div>
-        <div class="k">Inputs</div>
-        <div class="v mono">${escapeHtml(String(inputCount))}</div>
-        <div class="k">Outputs</div>
-        <div class="v mono">${escapeHtml(String(outputCount))}</div>
-        <div class="k">Fee</div>
-        <div class="v mono">${escapeHtml(ds.fmtUsd8(fee))} USDm</div>
-      </div>
-
-      <h2>Protocol attestations</h2>
-      ${attestations.length === 0 ?
-        '<div class="empty">No <code>ion://op/v1?</code> attestations decoded from tx_extra.<div class="hint">This is a plain USDm transfer with no protocol op attached.</div></div>' :
-        renderAttestations(attestations)}
-    `;
+    tx = (r && r.txs && r.txs[0]) || null;
+    if (!tx && r && r.txs_as_json && r.txs_as_json[0]) {
+      tx = { as_json: r.txs_as_json[0] };
+    }
+    if (!tx) throw new Error('Transaction not found');
+    txInfo = tx.as_json ? JSON.parse(tx.as_json) : tx;
   } catch (e) {
-    el.innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
+    errorMsg = e && e.message || String(e);
   }
+
+  if (errorMsg) {
+    view.innerHTML = `<div class="error-box"><strong>Error:</strong> ${escapeHtml(errorMsg)}</div>`;
+    return;
+  }
+
+  const fee         = txInfo.rct_signatures?.txnFee ?? tx.fee ?? 0;
+  const blockHeight = tx.block_height;
+  const blockTime   = tx.block_timestamp;
+  const inputCount  = txInfo.vin?.length ?? '?';
+  const outputCount = txInfo.vout?.length ?? '?';
+  const size        = tx.size || tx.tx_size || null;
+  const inPool      = blockHeight == null || blockHeight === -1;
+
+  const attestations = extractAttestationsFromExtra(txInfo.extra ?? tx.extra);
+
+  view.innerHTML = `
+    <section>
+      <h2>Transaction</h2>
+      <div class="detail-table">
+        <table>
+          <tbody>
+            <tr><td class="label">Hash</td><td class="mono break-all">${escapeHtml(hash)}</td></tr>
+            <tr><td class="label">Status</td><td>${inPool ? '<span class="badge badge-warn">In Mempool</span>' : `<a href="#/block/${escapeHtml(String(blockHeight))}">Block ${Number(blockHeight).toLocaleString()}</a>${blockTime ? ` <span class="muted">(${escapeHtml(timeSince(blockTime))})</span>` : ''}`}</td></tr>
+            <tr><td class="label">Inputs</td><td>${escapeHtml(String(inputCount))}</td></tr>
+            <tr><td class="label">Outputs</td><td>${escapeHtml(String(outputCount))}</td></tr>
+            <tr><td class="label">Fee</td><td>${escapeHtml(formatAmount(fee))} USDm</td></tr>
+            ${size ? `<tr><td class="label">Size</td><td>${(size / 1024).toFixed(2)} KB</td></tr>` : ''}
+            ${txInfo.unlock_time != null ? `<tr><td class="label">Unlock time</td><td>${escapeHtml(String(txInfo.unlock_time))}</td></tr>` : ''}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h3>Protocol Attestations</h3>
+      ${attestations.length === 0 ?
+        '<p class="muted">No <code>ion://op/v1?</code> attestations decoded from tx_extra. This is a plain USDm transfer with no protocol op attached.</p>' :
+        renderAttestations(attestations)}
+    </section>
+  `;
 }
 
 function renderAttestations(arr) {
-  return arr.map((a, i) => {
+  return arr.map((a) => {
     const code = a.code || '?';
     const payloadJson = JSON.stringify(a.payload, null, 2);
+    const rows = renderPayloadDeepLinks(a.payload);
     return `
-      <div class="section">
-        <div class="kv">
-          <div class="k">Op code</div>
-          <div class="v mono"><strong>${escapeHtml(code)}</strong></div>
-          ${renderPayloadDeepLinks(code, a.payload)}
-        </div>
-        <details style="margin-top:12px">
-          <summary class="muted">Raw payload</summary>
-          <pre class="mono" style="overflow:auto;background:var(--bg-elevated);padding:12px;border-radius:8px;font-size:12px">${escapeHtml(payloadJson)}</pre>
-        </details>
+      <div class="detail-table" style="margin-bottom:14px">
+        <table>
+          <tbody>
+            <tr><td class="label">Op Code</td><td><span class="badge">${escapeHtml(code)}</span></td></tr>
+            ${rows}
+          </tbody>
+        </table>
       </div>
+      <details style="margin: -6px 0 18px 0">
+        <summary class="muted" style="cursor:pointer;font-size:0.85rem">Raw payload</summary>
+        <pre class="mono" style="overflow:auto;background:var(--bg-card);border:1px solid var(--border);padding:12px;border-radius:6px;font-size:12px;margin-top:8px">${escapeHtml(payloadJson)}</pre>
+      </details>
     `;
   }).join('');
 }
 
-function renderPayloadDeepLinks(code, p) {
-  const out = [];
-  if (p?.tokenId) out.push(['Token', `<a href="#/token/${escapeHtml(p.tokenId)}" class="mono">${escapeHtml(p.tokenId)}</a>`]);
-  if (p?.poolId)  out.push(['Pool',  `<a href="#/pool/${escapeHtml(p.poolId)}" class="mono">${escapeHtml(p.poolId)}</a>`]);
-  if (p?.contractId) out.push(['Contract', `<a href="#/contract/${escapeHtml(p.contractId)}" class="mono">${escapeHtml(p.contractId)}</a>`]);
-  if (p?.destStealth) out.push(['Dest', `<a href="#/address/${escapeHtml(p.destStealth)}" class="mono">${escapeHtml(p.destStealth.slice(0,18) + '…')}</a>`]);
-  if (p?.amount) out.push(['Amount', `<span class="mono">${escapeHtml(p.amount)}</span>`]);
-  return out.map(([k, v]) => `<div class="k">${escapeHtml(k)}</div><div class="v">${v}</div>`).join('');
+function renderPayloadDeepLinks(p) {
+  if (!p) return '';
+  const rows = [];
+  if (p.tokenId)      rows.push(['Token',    `<a href="#/token/${encodeURIComponent(p.tokenId)}" class="mono">${escapeHtml(p.tokenId)}</a>`]);
+  if (p.poolId)       rows.push(['Pool',     `<a href="#/pool/${encodeURIComponent(p.poolId)}" class="mono">${escapeHtml(p.poolId)}</a>`]);
+  if (p.contractId)   rows.push(['Contract', `<a href="#/contract/${encodeURIComponent(p.contractId)}" class="mono">${escapeHtml(p.contractId)}</a>`]);
+  if (p.destStealth)  rows.push(['Dest',     `<a href="#/address/${encodeURIComponent(p.destStealth)}" class="mono">${escapeHtml(shortAddr(p.destStealth))}</a>`]);
+  if (p.amount)       rows.push(['Amount',   `<span class="mono">${escapeHtml(String(p.amount))}</span>`]);
+  if (p.entrypoint)   rows.push(['Entrypoint', `<span class="mono">${escapeHtml(p.entrypoint)}</span>`]);
+  if (p.symbol)       rows.push(['Symbol',   `<span class="mono">${escapeHtml(p.symbol)}</span>`]);
+  if (p.version)      rows.push(['Version',  `<span class="mono">${escapeHtml(String(p.version))}</span>`]);
+  return rows.map(([k, v]) => `<tr><td class="label">${escapeHtml(k)}</td><td>${v}</td></tr>`).join('');
 }

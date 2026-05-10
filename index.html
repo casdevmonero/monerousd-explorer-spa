@@ -1,10 +1,10 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MoneroUSD Explorer</title>
-  <meta name="description" content="Sovereign block explorer for the MoneroUSD chain. Reads from your local wallet provider when available, otherwise from a federated list of community-run daemon RPCs and indexer mirrors." />
+  <meta name="description" content="Sovereign block explorer for the MoneroUSD chain. Reads from your local wallet provider when available, otherwise from a federated list of community-run daemon RPCs and indexer mirrors.">
 
   <!-- CSP — locks down to same-origin + the federated indexer/RPC
        hosts the SPA queries. No CDN scripts, no eval. -->
@@ -12,41 +12,144 @@
     default-src 'self';
     script-src 'self';
     style-src 'self' 'unsafe-inline';
-    img-src 'self' data:;
+    img-src 'self' data: https://ion.monerousd.org;
     connect-src 'self' https://*.monerousd.org;
     base-uri 'self';
     form-action 'self';
     frame-ancestors 'none';
-  " />
+  ">
 
-  <link rel="stylesheet" href="styles/theme.css" />
+  <link rel="stylesheet" href="styles/theme.css?v=210">
+  <style>
+    /* Loader — static logo, orange ring orbits around it.
+       Ported from monerousd-explorer/views/header.ejs (v1.2.132 redesign). */
+    #usdm-loader {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at center, #0e0e0e 0%, #000 80%);
+      transition: opacity .25s ease, visibility .25s ease;
+    }
+    #usdm-loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    .usdm-loader-stage {
+      position: relative;
+      width: 128px; height: 128px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .usdm-loader-logo {
+      width: 96px; height: 96px;
+      filter: drop-shadow(0 0 14px rgba(255,102,0,0.25));
+    }
+    .usdm-loader-ring {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      background: conic-gradient(
+        from 0deg,
+        rgba(247,148,29,0.95) 0deg,
+        rgba(247,148,29,0.55) 40deg,
+        rgba(247,148,29,0.15) 90deg,
+        rgba(247,148,29,0)    180deg,
+        rgba(247,148,29,0)    360deg
+      );
+      -webkit-mask: radial-gradient(circle, transparent 56px, #000 58px, #000 62px, transparent 64px);
+              mask: radial-gradient(circle, transparent 56px, #000 58px, #000 62px, transparent 64px);
+      animation: usdm-ring-spin 1.4s linear infinite;
+    }
+    @keyframes usdm-ring-spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .usdm-loader-label {
+      position: absolute; bottom: 38%;
+      font-family: system-ui,-apple-system,sans-serif;
+      font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,102,0,0.8);
+    }
+    /* Connection pill — surfaces the active data source. */
+    .source-pill {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 10px; font-size: 0.75rem;
+      background: rgba(63, 185, 80, 0.12); color: var(--green);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+      margin-left: auto;
+    }
+    .source-pill.connecting {
+      background: rgba(210, 153, 34, 0.12); color: var(--orange);
+      border-color: rgba(210, 153, 34, 0.3);
+    }
+    .source-pill.error {
+      background: rgba(248, 81, 73, 0.12); color: var(--red);
+      border-color: rgba(248, 81, 73, 0.3);
+    }
+    /* Hash-route nav handles its own underline */
+    a.header-nav-link.active { color: var(--accent); }
+    /* Tighter "loading…" placeholder */
+    .empty, .loading {
+      padding: 32px 16px; text-align: center;
+      color: var(--text-muted);
+    }
+    .empty code { color: var(--accent); }
+    .hint { margin-top: 14px; font-size: 0.9rem; }
+  </style>
 </head>
 <body>
+  <div id="usdm-loader" aria-hidden="true">
+    <div class="usdm-loader-stage">
+      <div class="usdm-loader-ring" aria-hidden="true"></div>
+      <svg class="usdm-loader-logo" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MoneroUSD">
+        <defs>
+          <linearGradient id="usdm-outer" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#888"/>
+            <stop offset="50%" stop-color="#555"/>
+            <stop offset="100%" stop-color="#333"/>
+          </linearGradient>
+          <radialGradient id="usdm-face" cx="50%" cy="38%" r="55%">
+            <stop offset="0%" stop-color="#4d4d4d"/>
+            <stop offset="100%" stop-color="#2a2a2a"/>
+          </radialGradient>
+          <linearGradient id="usdm-m" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#f7941d"/>
+            <stop offset="50%" stop-color="#f5851a"/>
+            <stop offset="100%" stop-color="#e07517"/>
+          </linearGradient>
+        </defs>
+        <circle cx="128" cy="128" r="120" fill="url(#usdm-outer)" stroke="#333" stroke-width="2"/>
+        <circle cx="128" cy="128" r="102" fill="url(#usdm-face)"/>
+        <polygon points="62,178 62,89 128,155 194,89 194,178 176,178 176,119 128,167 80,119 80,178" fill="url(#usdm-m)"/>
+        <rect x="42" y="162" width="38" height="16" rx="2" fill="url(#usdm-m)"/>
+        <rect x="176" y="162" width="38" height="16" rx="2" fill="url(#usdm-m)"/>
+      </svg>
+    </div>
+    <div class="usdm-loader-label">Loading</div>
+  </div>
+
   <header>
-    <a href="#/" class="brand">
-      <span class="brand-mark">M</span>
-      <span class="brand-name">MoneroUSD Explorer</span>
-    </a>
-    <nav>
-      <input id="search-input" type="search"
-        placeholder="Search block height, tx hash, address, tokenId, contractId…"
-        spellcheck="false" autocomplete="off" />
-    </nav>
-    <div class="status">
-      <span id="data-source-pill" class="pill">connecting…</span>
+    <div class="container header-inner">
+      <a href="#/" class="logo">MoneroUSD <span class="logo-sub">Explorer</span></a>
+      <nav class="header-nav">
+        <a href="#/contracts" class="header-nav-link">Contracts</a>
+        <a href="#/tokens" class="header-nav-link">Tokens</a>
+      </nav>
+      <form class="search-form" id="search-form" onsubmit="return false;">
+        <div class="search-wrapper">
+          <input type="text" id="search-input" placeholder="Search by tx hash, block height, block hash, or token" autocomplete="off" spellcheck="false">
+          <div class="search-dropdown" id="search-dropdown"></div>
+        </div>
+        <button type="submit" id="search-btn">Search</button>
+      </form>
+      <span class="source-pill connecting" id="source-pill">connecting…</span>
     </div>
   </header>
 
-  <main id="view"></main>
+  <main class="container" id="view">
+    <div class="loading">Loading…</div>
+  </main>
 
   <footer>
-    <span class="footer-line">
-      MoneroUSD Explorer · sovereign + chain-derived ·
-      <a href="https://github.com/casdevmonero" rel="noopener">code</a> ·
-      <span id="footer-source"></span>
-    </span>
+    <div class="container">
+      <p>MoneroUSD Block Explorer &mdash; FCMP++ Privacy &middot; <span id="footer-source">connecting…</span></p>
+    </div>
   </footer>
 
-  <script src="app.js" type="module"></script>
+  <script type="module" src="app.js?v=210"></script>
 </body>
 </html>
