@@ -65,14 +65,13 @@ export async function renderValidators(ctx) {
       <div id="val-body"><div class="loading">Querying federated indexer…</div></div>
     </section>
 
-    <section class="card" id="card-nodes">
-      <div class="card-header">
-        <h2>Network nodes</h2>
-        <div class="card-action" id="nodes-action">Loading…</div>
-      </div>
-      <div id="nodes-body"><div class="loading">Reading FROST-signed peer manifest…</div></div>
-    </section>
-
+    <!--
+      Network-nodes detail section REMOVED in v1.2.229. Exposing
+      per-node IP addresses leaks operator metadata (MoneroUSD nodes
+      are meant to stay anonymized). The aggregate count in the
+      Known Network Nodes tile above is preserved and auto-refreshes
+      every 30 s via the ecosystem layer's getNetworkNodes() helper.
+    -->
     <section class="card" id="card-slashing" style="display:none">
       <div class="card-header">
         <h2>Slashing schedule</h2>
@@ -87,6 +86,20 @@ export async function renderValidators(ctx) {
   paintValidators(view, vr);
   paintNodes(view, nr);
   paintSlashing(view, vr);
+
+  // Live auto-refresh — the Known Network Nodes + Active Validators
+  // tiles re-fetch every 30 s so an operator adding/removing a seed
+  // surfaces here without a manual reload. Clear the interval when
+  // the user navigates away (the next dispatch wipes `#val-stats`).
+  const interval = setInterval(async () => {
+    if (!view.querySelector('#val-stats')) {
+      clearInterval(interval);
+      return;
+    }
+    const [vr2, nr2] = await Promise.all([getValidators(), getNetworkNodes()]);
+    paintValidators(view, vr2);
+    paintNodes(view, nr2);
+  }, 30_000);
 }
 
 function paintValidators(view, r) {
@@ -178,62 +191,34 @@ function paintValidators(view, r) {
   }
 }
 
+// Updates only the "Known Network Nodes" stat tile. The full
+// detail listing was REMOVED in v1.2.229 — per-node IP addresses
+// leak operator metadata. The wallet's no-islanding stack still
+// consumes the full peer manifest for connectivity; the explorer
+// just shows a privacy-safe count.
+//
+// The displayed count prefers `manifest.known_node_count` (the
+// operator-asserted total, set via KNOWN_NODE_COUNT env when
+// publish-peer-manifest.js was run). That count includes operator-
+// run nodes whose IPs are intentionally NOT in the public seed
+// list (home labs / on-call boxes). Falls back to seeds.length
+// when the field isn't present.
 function paintNodes(view, r) {
   const data = r.data || r;
   const seeds = data?.seeds || [];
-  const nodesEl = view.querySelector('#stat-nodes');
+  const count = Number.isInteger(data?.knownNodeCount)
+    ? data.knownNodeCount
+    : seeds.length;
+  const nodesEl  = view.querySelector('#stat-nodes');
   const nodesSub = view.querySelector('#stat-nodes-sub');
-  const action = view.querySelector('#nodes-action');
-  const body = view.querySelector('#nodes-body');
-
-  nodesEl.textContent = seeds.length.toLocaleString('en-US');
-  if (data?.publishedAt) {
-    nodesSub.innerHTML = `manifest @ block ${data.publishedAt.toLocaleString('en-US')}`;
+  if (nodesEl) nodesEl.textContent = count.toLocaleString('en-US');
+  if (nodesSub) {
+    if (data?.publishedAt) {
+      nodesSub.innerHTML = `manifest @ block ${Number(data.publishedAt).toLocaleString('en-US')} · ${sourceLabel(r.source)}`;
+    } else {
+      nodesSub.innerHTML = sourceLabel(r.source);
+    }
   }
-
-  if (!seeds.length) {
-    action.innerHTML = 'no nodes in manifest';
-    body.innerHTML = `
-      <div class="empty">
-        The FROST-signed peer manifest at <code>update.monerousd.org/peer-manifest.json</code>
-        is currently empty or unreachable. This is the floor of known nodes; the actual peer
-        graph is larger (community-run daemons connect dynamically).
-      </div>
-    `;
-    return;
-  }
-
-  action.innerHTML = `${seeds.length} seed${seeds.length === 1 ? '' : 's'} · ${sourceLabel(r.source)}`;
-  body.innerHTML = `
-    <p style="margin:0 0 14px;color:var(--text-secondary);font-size:13px;line-height:1.55">
-      These are the canonical, operator-curated bootstrap nodes. Every wallet starts here
-      then discovers community nodes via the standard P2P gossip protocol — actual reachable
-      node count grows past this floor as the network matures.
-    </p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Type</th>
-            <th>Address</th>
-            <th class="num">Port</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${seeds.map((s, i) => `
-            <tr>
-              <td>${i + 1}</td>
-              <td><span class="badge badge-muted">${escape(s.id || 'IPV4')}</span></td>
-              <td class="mono">${escape(s.addr || '')}</td>
-              <td class="num">${escape(String(s.port || '—'))}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-    ${data.expiresAt ? `<p style="margin:14px 0 0;font-size:12px;color:var(--text-muted)">Manifest expires at block ${Number(data.expiresAt).toLocaleString('en-US')}; operators re-sign + re-publish before then.</p>` : ''}
-  `;
 }
 
 function paintSlashing(view, r) {
