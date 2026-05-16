@@ -1186,9 +1186,23 @@ td.mono,
 .kv-table dd {
   margin: 0;
   color: var(--text-primary);
-  word-break: break-all;
+  /* Don't break in the middle of words for prose. The legacy
+     `word-break: break-all` was great for 64-char hashes but
+     fragmented normal sentences ("FC / MP++", "co / ncealed",
+     etc) on narrow viewports. Hashes / token-ids get the
+     aggressive break via the .mono override below. */
+  overflow-wrap: anywhere;
+  word-break: normal;
+  min-width: 0;
 }
-.kv-table dd.mono { font-family: var(--font-mono); font-size: 12px; }
+.kv-table dd.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  /* Force aggressive break for hashes / tokenIds (no natural
+     word boundaries to land on). */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
 
 /* ════════════════════════════════════════════════════════════════════
  * Privacy primitives explainer (educational page)
@@ -1276,7 +1290,22 @@ footer a { color: var(--accent); }
   .hero h1 { font-size: 1.4rem; }
   .hero p { font-size: 13px; }
   .privacy-grid { grid-template-columns: 1fr; }
-  .kv-table { grid-template-columns: 130px 1fr; gap: 8px 14px; }
+  /* On phones the 2-column kv-table squeezes long prose. Stack
+     dt/dd vertically — label on its own row, value full-width —
+     so sentences and hashes both have the full content area to
+     wrap into. */
+  .kv-table {
+    grid-template-columns: 1fr;
+    gap: 4px 0;
+    margin-bottom: 0;
+  }
+  .kv-table dt {
+    padding-top: 12px;
+    border-top: 1px solid var(--row-divider);
+    margin-top: 4px;
+  }
+  .kv-table > dt:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+  .kv-table dd { padding-bottom: 4px; }
 }
 
 @media (max-width: 640px) {
