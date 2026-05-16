@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MoneroUSD Explorer · redirecting…</title>
+  <meta name="robots" content="noindex">
+  <style>
+    html, body { margin: 0; padding: 0; background: #0a0a0a; color: #FF6600;
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; }
+    .wrap { text-align: center; }
+    .ring { width: 32px; height: 32px; border: 3px solid rgba(255,102,0,0.25);
+      border-top-color: #FF6600; border-radius: 50%;
+      animation: spin 1s linear infinite; margin: 0 auto 14px; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    a { color: #FF8533; }
+  </style>
+  <!--
+    SPA-fallback bootstrap for GitHub Pages.
+
+    Background: this SPA uses hash routing (#/tx/<hash>) so it runs
+    as a static bundle on any host. But the desktop wallet (and
+    third-party tools) link to PATH-based URLs like
+        https://explorer.monerousd.org/tx/abc123
+    Those resolve to a real path on GitHub Pages → 404. The pattern
+    below (well-known as `spa-github-pages`) makes GH Pages serve
+    THIS 404.html with status 404; the inline script rewrites the
+    URL into the SPA's hash form via `location.replace`, after which
+    the home page's router picks it up and renders the right view.
+
+    Why `location.replace` (not `location.href = ...`): we don't
+    want the 404 URL to live in the user's history. Back-button
+    skips it cleanly.
+
+    Why a JS redirect at all (not a meta refresh): the meta-refresh
+    variant takes two paint frames; this one takes zero.
+
+    Adding new routes? You don't need to touch this file — anything
+    under `/<anything>` is forwarded as `#/<anything>` and the
+    router decides what to do with it. Unknown routes fall through
+    to the "No route matched" empty state, which is correct.
+  -->
+  <script>
+    (function () {
+      var p = window.location.pathname || '/';
+      var q = window.location.search || '';
+      // Strip a leading slash so the result is '#/tx/<hash>' not '#//tx/...'.
+      var route = p.replace(/^\/+/, '');
+      var target = window.location.origin + '/' +
+                   (q ? q + '#/' + route : '#/' + route);
+      window.location.replace(target);
+    })();
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="ring" aria-hidden="true"></div>
+    <p>Redirecting to <a id="link" href="/">MoneroUSD Explorer</a>…</p>
+  </div>
+</body>
+</html>
