@@ -57,20 +57,22 @@ export async function renderValidators(ctx) {
       </div>
     </div>
 
-    <section class="card" id="card-validators">
-      <div class="card-header">
-        <h2>Bonded validators</h2>
-        <div class="card-action" id="val-action">Loading…</div>
-      </div>
-      <div id="val-body"><div class="loading">Querying federated indexer…</div></div>
-    </section>
+    <!--
+      Per-validator detail section REMOVED in v1.2.230 per user
+      request. The aggregate stats (Active validators / Applications
+      open / Min bond / Known network nodes) stay above and
+      auto-refresh every 30 s. The per-validator-pubkey table was
+      always-empty in production anyway because the production
+      indexer does NOT expose per-validator detail (privacy posture
+      — leaking the FROST signer-set composition weakens the
+      bridge's collusion-resistance properties).
+    -->
 
     <!--
-      Network-nodes detail section REMOVED in v1.2.229. Exposing
-      per-node IP addresses leaks operator metadata (MoneroUSD nodes
-      are meant to stay anonymized). The aggregate count in the
-      Known Network Nodes tile above is preserved and auto-refreshes
-      every 30 s via the ecosystem layer's getNetworkNodes() helper.
+      Network-nodes detail section also REMOVED earlier in v1.2.229.
+      Exposing per-node IP addresses leaks operator metadata. The
+      Known Network Nodes tile above is the only public node-count
+      surface.
     -->
     <section class="card" id="card-slashing" style="display:none">
       <div class="card-header">
@@ -102,11 +104,15 @@ export async function renderValidators(ctx) {
   }, 30_000);
 }
 
+// Updates only the four stat tiles (Active / Applications open /
+// Min bond / Known network nodes) — the per-validator detail
+// section was REMOVED in v1.2.230 (the production indexer never
+// exposed per-validator pubkeys; the empty-state explanation was
+// confusing the user into thinking something was broken).
 function paintValidators(view, r) {
   const data = r.data || r;
   const count = data?.count || {};
   const economics = data?.economics || {};
-  const list = data?.list || [];
 
   const activeEl  = view.querySelector('#stat-active');
   const activeSub = view.querySelector('#stat-active-sub');
@@ -115,80 +121,22 @@ function paintValidators(view, r) {
   const bondEl    = view.querySelector('#stat-bond');
 
   const active = Number(count.active_validators ?? 0);
-  activeEl.textContent = active.toLocaleString('en-US');
-  activeSub.innerHTML = sourceLabel(r.source);
+  if (activeEl)  activeEl.textContent = active.toLocaleString('en-US');
+  if (activeSub) activeSub.innerHTML = sourceLabel(r.source);
 
   const open = count.applications_open;
-  appsEl.innerHTML = open
-    ? '<span style="color:var(--success)">Open</span>'
-    : (open === false ? '<span style="color:var(--warning)">Closed</span>' : '—');
-  appsSub.textContent = open ? 'New validators welcome' : (open === false ? 'Set is full or paused' : '');
+  if (appsEl) {
+    appsEl.innerHTML = open
+      ? '<span style="color:var(--success)">Open</span>'
+      : (open === false ? '<span style="color:var(--warning)">Closed</span>' : '—');
+  }
+  if (appsSub) {
+    appsSub.textContent = open ? 'New validators welcome'
+      : (open === false ? 'Set is full or paused' : '');
+  }
 
   const minBondDisplay = count.min_bond_display || economics.min_bond_display || '—';
-  bondEl.textContent = minBondDisplay;
-
-  // Validator list — when the indexer exposes per-validator data
-  // we render a table. Otherwise the empty state explains why.
-  const body = view.querySelector('#val-body');
-  const action = view.querySelector('#val-action');
-  if (list.length) {
-    action.innerHTML = `${list.length} bonded · ${sourceLabel(r.source)}`;
-    body.innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Validator</th>
-              <th class="num">Bond</th>
-              <th class="num">Signal rate</th>
-              <th>Since</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${list.map((v, i) => `
-              <tr>
-                <td>${i + 1}</td>
-                <td class="mono">${escape(short(v.pubkey || v.validator || v.id || ''))}</td>
-                <td class="num">${((Number(v.bond_atomic || v.bond || 0)) / 1e8).toFixed(2)} USDm</td>
-                <td class="num">${v.signal_rate != null ? (Number(v.signal_rate) * 100).toFixed(1) + '%' : '—'}</td>
-                <td>${escape(v.since_block ? '#' + v.since_block : (v.since || '—'))}</td>
-                <td>${statusBadge(v.status || (v.active ? 'active' : 'inactive'))}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  } else if (active > 0) {
-    action.innerHTML = `${active} bonded · per-validator detail hidden`;
-    body.innerHTML = `
-      <div class="empty">
-        <strong>${active}</strong> validators bonded right now. Per-validator pubkeys
-        are intentionally not exposed by the production indexer — leaking the FROST
-        signer-set composition would weaken the bridge's collusion-resistance
-        properties. See <a href="#/privacy">/privacy</a> for the full
-        concealed-vs-public table.
-        <div class="hint">
-          The aggregate stats above are sufficient for ecosystem health monitoring;
-          per-validator slash events publish to the chain when they occur.
-        </div>
-      </div>
-    `;
-  } else {
-    action.innerHTML = r.source === 'offline' ? 'indexer offline' : 'no validators bonded yet';
-    body.innerHTML = `
-      <div class="empty">
-        ${r.source === 'offline'
-          ? '<strong>Indexer unreachable.</strong> Validator data is on chain — when any federated indexer responds, this page auto-populates.'
-          : 'Zero validators bonded. The bridge is in its bootstrap phase; the first validator can bond at <strong>' + escape(minBondDisplay) + '</strong> via BridgeValidatorBond.'}
-        <div class="hint">
-          <a href="#/contract/BridgeValidatorBond">View the bond contract →</a>
-        </div>
-      </div>
-    `;
-  }
+  if (bondEl) bondEl.textContent = minBondDisplay;
 }
 
 // Updates only the "Known Network Nodes" stat tile. The full
