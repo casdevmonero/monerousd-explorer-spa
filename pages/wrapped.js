@@ -7,6 +7,7 @@
 // custody for that wrapper.
 
 import { WRAPPED_ASSETS, logoUrlFor } from '../lib/registries.js';
+import { goldCheckHTML } from '../lib/helpers.js';
 
 export async function renderWrapped(ctx) {
   const { view } = ctx;
@@ -33,7 +34,7 @@ export async function renderWrapped(ctx) {
                      onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initials(w.symbol))}'}))">
               </div>
               <div>
-                <div class="entity-title">${escape(w.symbol)} <span class="badge badge-verified">wrapped</span></div>
+                <div class="entity-title">${escape(w.symbol)} ${goldCheckHTML()}</div>
                 <div class="entity-sub">${escape(w.name)}</div>
               </div>
             </div>

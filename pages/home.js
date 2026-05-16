@@ -232,6 +232,26 @@ export async function renderHome(ctx) {
     </section>
   `;
 
+  // Wire a Refresh-on-click on the Updated header — users on slow
+  // connections want a manual retry button.
+  view.addEventListener('click', e => {
+    if (e.target.closest('#txs-action')) {
+      e.preventDefault();
+      paintRecentTxs(ctx, [], Number(info?.height || 1) - 1, Number(info?.height || 0));
+    }
+    if (e.target.closest('#blocks-action')) {
+      e.preventDefault();
+      (async () => {
+        const newInfo = await ds.callDaemon('get_info').catch(() => null);
+        const newTip = Number(newInfo?.height || 0);
+        const top = Math.max(0, newTip - 1);
+        const fresh = await fetchRecentBlocks(ds, top, RECENT_BLOCK_PAGE_SIZE);
+        paintBlocks(ctx, fresh, top, newTip);
+        paintRecentTxs(ctx, fresh, top, newTip);
+      })();
+    }
+  });
+
   // Phase 2 — fetch get_info + paint real hero.
   let info = {};
   try { info = await ds.callDaemon('get_info'); } catch (_) {}
@@ -299,16 +319,29 @@ function paintBlocks(ctx, blocks, top, tip) {
 }
 
 // Recent transactions card — pulls the tx-hash list out of recent
-// blocks (visible window first, then walks deeper if the visible
-// window is all coinbase). Fetches up to RECENT_TX_LIMIT bodies in
-// a single batched call. FCMP++ vs RingCT badge per row; each hash
-// deep-links to /tx.
+// blocks. To avoid the legacy "200-sequential-getBlock" walk that
+// made the section flicker between empty and full, we now batch the
+// deep-lookback fetch in PARALLEL chunks and cap the total scan at
+// RECENT_TX_DEEP_LOOKBACK blocks (50). Each chunk of 10 blocks
+// fetches concurrently; we early-exit as soon as RECENT_TX_LIMIT
+// hashes have been collected. Worst case: 5 round-trips of 10
+// parallel fetches each → ~10 s on cold network.
+//
+// The `_renderToken` token at top of every render disambiguates
+// in-flight repaints from a new render started by a route change —
+// if paintRecentTxs is mid-fetch and the user navigates away, the
+// stale callback no-ops instead of overwriting the new page.
 const RECENT_TX_LIMIT = 16;
-const RECENT_TX_DEEP_LOOKBACK = 200;  // hard cap on how far we'll
-                                       // walk back if blocks are sparse.
+const RECENT_TX_DEEP_LOOKBACK = 200;  // total blocks to walk back
+const RECENT_TX_CHUNK = 10;           // blocks per parallel batch
+
+let _recentTxsToken = 0;
 
 async function paintRecentTxs(ctx, visibleBlocks, visibleTop, tip) {
   const { ds, view } = ctx;
+  const token = ++_recentTxsToken;
+  const stillCurrent = () => token === _recentTxsToken;
+
   const body = view.querySelector('#txs-body');
   const action = view.querySelector('#txs-action');
   if (!body) return;
@@ -316,25 +349,38 @@ async function paintRecentTxs(ctx, visibleBlocks, visibleTop, tip) {
   // First pass — use the visible window.
   const items = collectTxHashes(visibleBlocks, RECENT_TX_LIMIT);
 
-  // If the visible window is all coinbase, walk further back so the
-  // user always sees real activity (the chain is sparse early in life).
+  // If the visible window is all coinbase, walk further back in
+  // PARALLEL chunks. Early-exit once we have enough hashes.
   if (!items.length && visibleTop > 0) {
-    const deepStart = visibleTop - visibleBlocks.length;
-    const blocksToScan = Math.min(RECENT_TX_DEEP_LOOKBACK, deepStart + 1);
-    if (blocksToScan > 0) {
-      body.innerHTML = `<div class="loading">Searching the last ${blocksToScan} blocks for user transactions…</div>`;
-      const deepBlocks = await fetchRecentBlocks(ds, deepStart, blocksToScan);
-      items.push(...collectTxHashes(deepBlocks, RECENT_TX_LIMIT));
+    let scanFrom = visibleTop - visibleBlocks.length;
+    const hardFloor = Math.max(0, visibleTop + 1 - RECENT_TX_DEEP_LOOKBACK);
+    body.innerHTML = `<div class="loading">Scanning recent blocks for user transactions…</div>`;
+    while (items.length < RECENT_TX_LIMIT && scanFrom >= hardFloor) {
+      if (!stillCurrent()) return; // user navigated away — abort
+      const heights = [];
+      for (let i = 0; i < RECENT_TX_CHUNK && scanFrom - i >= hardFloor; i++) {
+        heights.push(scanFrom - i);
+      }
+      const chunk = await Promise.all(heights.map(h =>
+        ds.getBlockByHeight(h).catch(() => null)
+      ));
+      const validBlocks = chunk.filter(Boolean);
+      items.push(...collectTxHashes(validBlocks, RECENT_TX_LIMIT - items.length));
+      scanFrom -= RECENT_TX_CHUNK;
     }
   }
+
+  if (!stillCurrent()) return;
 
   if (!items.length) {
     if (action) action.textContent = 'no tx activity found';
     body.innerHTML = `
       <div class="empty">
-        No user transactions found in the last
-        ${Math.min(RECENT_TX_DEEP_LOOKBACK, visibleTop + 1).toLocaleString('en-US')} blocks (coinbase only).
-        <div class="hint">When wallets transact, their txs land here. Mempool activity surfaces in <a href="#/mempool">/mempool</a> (coming).</div>
+        No user transactions in the last
+        ${Math.min(RECENT_TX_DEEP_LOOKBACK, visibleTop + 1).toLocaleString('en-US')} blocks
+        (coinbase only).
+        <div class="hint">When wallets transact, their txs land here.
+          The recent-blocks table above still updates every refresh.</div>
       </div>
     `;
     return;
@@ -347,6 +393,7 @@ async function paintRecentTxs(ctx, visibleBlocks, visibleTop, tip) {
     txs = r?.txs || [];
   } catch (_) { txs = []; }
 
+  if (!stillCurrent()) return;
   if (action) action.textContent = `${items.length} most recent`;
   body.innerHTML = `
     <div class="table-wrap">

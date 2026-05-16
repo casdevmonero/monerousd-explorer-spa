@@ -4,12 +4,13 @@
 // chain artifacts: tokens, dark contracts, sovereign sites, NFTs.
 // The registry is hardcoded in lib/registries.js for the same
 // reason VERIFIED_TOKENS is: clone-name protection. Anyone CAN
-// deploy under any name on chain — the badge marks the genuine
-// publisher.
+// deploy under any name on chain — the gold check marks the
+// genuine publisher.
 //
 // Click an org → /org/<slug>: profile + aggregated footprint.
 
 import { VERIFIED_ORGS } from '../lib/registries.js';
+import { goldCheckHTML } from '../lib/helpers.js';
 
 export async function renderOrgs(ctx) {
   const { view } = ctx;
@@ -32,18 +33,22 @@ export async function renderOrgs(ctx) {
         ${VERIFIED_ORGS.map(o => `
           <a class="entity-card" href="#/org/${encodeURIComponent(o.slug)}">
             <div class="entity-head">
-              <div class="entity-logo">${escape(initials(o.name))}</div>
+              <div class="entity-logo">
+                ${o.logoUrl
+                  ? `<img src="${escape(o.logoUrl)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initials(o.name))}'}))">`
+                  : `<span>${escape(initials(o.name))}</span>`}
+              </div>
               <div>
                 <div class="entity-title">
                   ${escape(o.name)}
-                  <span class="badge badge-verified">verified</span>
+                  ${goldCheckHTML()}
                 </div>
                 <div class="entity-sub">${escape(o.slug)}</div>
               </div>
             </div>
             <p class="entity-body">${escape(o.blurb || '')}</p>
             <div class="entity-meta">
-              ${(o.badges || []).map(b => `<span class="badge badge-muted">${escape(b)}</span>`).join('')}
+              ${(o.badges || []).filter(b => b !== 'verified').map(b => `<span class="badge badge-muted">${escape(b)}</span>`).join('')}
             </div>
           </a>
         `).join('')}

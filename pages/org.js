@@ -1,24 +1,28 @@
 // pages/org.js — Organization profile.
 //
-// Aggregates everything an org touches on chain into one
-// Phantom-style profile: tokens issued, wrapped assets custodied,
-// dark contracts deployed, sovereign sites published, reserve
-// contributions.
+// Aggregates every chain-anchored artifact for one verified org
+// into one Phantom-style profile: issued tokens, custodied wrapped
+// assets, NFT collections, deployed dark contracts, published
+// sovereign sites, and live source-of-truth indicators per section.
 //
-// Data is filtered from the static registries (lib/registries.js)
-// + the federated indexer endpoints (/v1/tokens, /v1/contracts,
-// /v1/sites). When the indexer is unreachable the page degrades
-// gracefully — the verified registry sections still render.
+// Data path:
+//   lib/ecosystem.js::getOrgFootprint(slug)
+//     ├── live indexer fetch (multi-endpoint failover, 30s cache)
+//     └── seeds from lib/registries.js if indexer is offline
+//
+// Every section soft-fails independently — if the contracts query
+// returns 502 the sites + tokens + wrapped sections still render
+// because each one fetched separately.
 
-import {
-  VERIFIED_ORGS, VERIFIED_TOKENS, WRAPPED_ASSETS, VERIFIED_NFTS,
-  logoUrlFor, getOrg,
-} from '../lib/registries.js';
+import { logoUrlFor } from '../lib/registries.js';
+import { getOrgFootprint } from '../lib/ecosystem.js';
+import { goldCheckHTML, escapeHtml as escape } from '../lib/helpers.js';
 
 export async function renderOrg(ctx, slug) {
-  const { ds, view } = ctx;
-  const org = getOrg(slug);
-  if (!org) {
+  const { view } = ctx;
+
+  const fp = await getOrgFootprint(slug);
+  if (!fp) {
     view.innerHTML = `
       <div class="empty">
         Unknown organization <code>${escape(slug)}</code>.
@@ -28,19 +32,23 @@ export async function renderOrg(ctx, slug) {
     return;
   }
 
-  const issuedTokens   = VERIFIED_TOKENS.filter(t => t.org === slug);
-  const issuedWrapped  = WRAPPED_ASSETS.filter(w => w.org === slug);
-  const issuedNfts     = VERIFIED_NFTS.filter(n => n.org === slug);
+  const { org, tokens, wrapped, nfts, contracts, sites, sources } = fp;
 
   view.innerHTML = `
     <header class="hero" style="padding:30px 32px">
-      <span class="hero-eyebrow">${escape((org.badges || []).join(' · ') || 'Verified')}</span>
-      <h1 style="font-size:1.6rem;display:flex;align-items:center;gap:12px">
-        <span class="entity-logo" style="width:40px;height:40px;font-size:16px">${escape(initials(org.name))}</span>
-        ${escape(org.name)}
-        <span class="badge badge-verified">verified</span>
+      <span class="hero-eyebrow">${escape((org.badges || []).filter(b => b !== 'verified').join(' · ') || 'Verified')}</span>
+      <h1 style="font-size:1.6rem;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span class="entity-logo" style="width:48px;height:48px;font-size:18px">
+          ${org.logoUrl
+            ? `<img src="${escape(org.logoUrl)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initials(org.name))}'}))">`
+            : `<span>${escape(initials(org.name))}</span>`}
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:10px">
+          ${escape(org.name)}
+          ${goldCheckHTML('xl')}
+        </span>
       </h1>
-      <p>${escape(org.blurb || '')}</p>
+      <p style="margin-top:8px">${escape(org.blurb || '')}</p>
       <div class="entity-meta" style="margin-top:14px;font-size:12px">
         ${org.website ? `<span>Website: <a href="${escape(org.website)}" target="_blank" rel="noopener noreferrer">${escape(org.website.replace(/^https?:\/\//, ''))}</a></span>` : ''}
         ${org.explorerSite ? `<span>Sovereign site: <a href="#/site/${escape(org.explorerSite)}">${escape(org.explorerSite)}</a></span>` : ''}
@@ -48,146 +56,82 @@ export async function renderOrg(ctx, slug) {
       </div>
     </header>
 
-    <section class="card" id="tokens-card">
+    <section class="card">
       <div class="card-header">
         <h2>Issued tokens</h2>
-        <div class="card-action">${issuedTokens.length} verified</div>
+        <div class="card-action">${tokens.length} ${tokens.length === 1 ? 'verified token' : 'verified tokens'}${sourceTag(sources.tokens)}</div>
       </div>
-      ${issuedTokens.length ? entityGrid(issuedTokens.map(toTokenCard)) :
-        '<div class="empty">This organization has not issued any verified tokens.</div>'}
+      ${tokens.length
+        ? entityGrid(tokens.map(toTokenCard))
+        : '<div class="empty">This organization has not issued any verified tokens.</div>'}
     </section>
 
-    <section class="card" id="wrapped-card">
+    <section class="card">
       <div class="card-header">
         <h2>Custodied wrapped assets</h2>
-        <div class="card-action">${issuedWrapped.length} bridged</div>
+        <div class="card-action">${wrapped.length} ${wrapped.length === 1 ? 'wrapper' : 'wrappers'}</div>
       </div>
-      ${issuedWrapped.length ? entityGrid(issuedWrapped.map(toWrappedCard)) :
-        '<div class="empty">This organization does not custody any wrapped assets.</div>'}
+      ${wrapped.length
+        ? entityGrid(wrapped.map(toWrappedCard))
+        : '<div class="empty">This organization does not custody any wrapped assets.</div>'}
     </section>
 
-    <section class="card" id="nfts-card">
+    <section class="card">
       <div class="card-header">
         <h2>NFT collections</h2>
-        <div class="card-action">${issuedNfts.length} verified</div>
+        <div class="card-action">${nfts.length} ${nfts.length === 1 ? 'verified collection' : 'verified collections'}</div>
       </div>
-      ${issuedNfts.length ? entityGrid(issuedNfts.map(toNftCard)) :
-        '<div class="empty">No verified NFT collections from this organization yet.</div>'}
+      ${nfts.length
+        ? entityGrid(nfts.map(toNftCard))
+        : '<div class="empty">No verified NFT collections from this organization yet.</div>'}
     </section>
 
-    <section class="card" id="contracts-card">
+    <section class="card">
       <div class="card-header">
-        <h2>Deployed Dark Contracts</h2>
-        <div class="card-action" id="contracts-action">Loading…</div>
+        <h2>Active dark contracts</h2>
+        <div class="card-action">${contracts.length} ${contracts.length === 1 ? 'contract' : 'contracts'}${sourceTag(sources.contracts)}</div>
       </div>
-      <div id="contracts-body"><div class="loading">Querying indexer…</div></div>
+      ${contracts.length
+        ? entityGrid(contracts.map(toContractCard))
+        : '<div class="empty">No contracts wired to this organization yet.</div>'}
     </section>
 
-    <section class="card" id="sites-card">
+    <section class="card">
       <div class="card-header">
         <h2>Published sovereign sites</h2>
-        <div class="card-action" id="sites-action">Loading…</div>
+        <div class="card-action">${sites.length} ${sites.length === 1 ? 'site' : 'sites'}${sourceTag(sources.sites)}</div>
       </div>
-      <div id="sites-body"><div class="loading">Querying indexer…</div></div>
+      ${sites.length
+        ? entityGrid(sites.map(toSiteCard))
+        : '<div class="empty">No sovereign sites published by this org yet.</div>'}
     </section>
   `;
-
-  // Indexer-fed sections (degrade gracefully on failure).
-  loadContracts(ctx, slug);
-  loadSites(ctx, org);
 }
 
-async function loadContracts(ctx, slug) {
-  const { ds, view } = ctx;
-  const body = view.querySelector('#contracts-body');
-  const action = view.querySelector('#contracts-action');
-  try {
-    const r = await ds.callIndexerSafe(`/v1/contracts?org=${encodeURIComponent(slug)}`);
-    const list = Array.isArray(r) ? r : (r && r.contracts) ? r.contracts : [];
-    if (action) action.textContent = list.length + ' deployed';
-    if (!list.length) {
-      body.innerHTML = '<div class="empty">No contracts deployed by this org yet.</div>';
-      return;
-    }
-    body.innerHTML = entityGrid(list.slice(0, 24).map(c => `
-      <a class="entity-card" href="#/contract/${encodeURIComponent(c.contractId || c.id)}">
-        <div class="entity-head">
-          <div class="entity-logo">C</div>
-          <div>
-            <div class="entity-title">${escape(c.name || 'Unnamed contract')}</div>
-            <div class="entity-sub">${escape(short(c.contractId || c.id || ''))}</div>
-          </div>
-        </div>
-        <div class="entity-meta">
-          <span>codeHash: <strong>${escape(short(c.codeHash || ''))}</strong></span>
-          <span>v${escape(String(c.version || 1))}</span>
-        </div>
-      </a>
-    `));
-  } catch (_) {
-    if (action) action.textContent = 'unavailable';
-    body.innerHTML = '<div class="empty">Indexer unreachable.</div>';
-  }
-}
-
-async function loadSites(ctx, org) {
-  const { ds, view } = ctx;
-  const body = view.querySelector('#sites-body');
-  const action = view.querySelector('#sites-action');
-  try {
-    const r = await ds.getSites();
-    const list = Array.isArray(r) ? r : (r && r.sites) ? r.sites : [];
-    // Filter by org slug if the indexer returns it, otherwise by
-    // matching against the org's known explorerSite domain.
-    const mine = list.filter(s =>
-      (s.org && s.org === org.slug) ||
-      (org.explorerSite && (s.domain || '').includes(org.explorerSite))
-    );
-    if (action) action.textContent = mine.length + ' published';
-    if (!mine.length) {
-      body.innerHTML = '<div class="empty">No sovereign sites published by this org yet.</div>';
-      return;
-    }
-    body.innerHTML = entityGrid(mine.slice(0, 24).map(s => `
-      <a class="entity-card" href="#/site/${encodeURIComponent(s.domain)}">
-        <div class="entity-head">
-          <div class="entity-logo">${escape(initials(s.domain))}</div>
-          <div>
-            <div class="entity-title">${escape(s.domain)} <span class="badge badge-verified">SITE_PUBLISH</span></div>
-            <div class="entity-sub">v${escape(String(s.version || '?'))}</div>
-          </div>
-        </div>
-        <div class="entity-meta">
-          ${s.size_bytes ? `<span>${(Number(s.size_bytes)/1024).toFixed(1)} KB gzipped</span>` : ''}
-          ${s.generated_at ? `<span>${escape(s.generated_at)}</span>` : ''}
-        </div>
-      </a>
-    `));
-  } catch (_) {
-    if (action) action.textContent = 'unavailable';
-    body.innerHTML = '<div class="empty">Indexer unreachable.</div>';
-  }
-}
+// ─── card renderers ──────────────────────────────────────────────
 
 function entityGrid(cards) {
   return `<div class="entity-grid">${cards.join('')}</div>`;
 }
 
 function toTokenCard(t) {
+  const sym = t.symbol || t.symbol_public || '';
+  const tid = t.tokenId || t.token_id || '';
   return `
-    <a class="entity-card" href="#/token/${encodeURIComponent(t.tokenId || t.symbol)}">
+    <a class="entity-card" href="#/token/${encodeURIComponent(tid || sym)}">
       <div class="entity-head">
         <div class="entity-logo">
-          <img src="${escape(logoUrlFor(t))}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initials(t.name || t.symbol))}'}))">
+          <img src="${escape(logoUrlFor({ symbol: sym, tokenId: tid }))}" alt=""
+               onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initials(t.name || sym))}'}))">
         </div>
         <div>
-          <div class="entity-title">${escape(t.symbol)} <span class="badge badge-verified">verified</span></div>
+          <div class="entity-title">${escape(sym)} ${goldCheckHTML()}</div>
           <div class="entity-sub">${escape(t.name || '')}</div>
         </div>
       </div>
       <p class="entity-body">${escape(t.description || (t.kind ? (t.kind + ' asset') : 'Verified token'))}</p>
       <div class="entity-meta">
-        <span>tokenId: <strong>${escape(short(t.tokenId || ''))}</strong></span>
+        <span>tokenId: <strong>${escape(short(tid))}</strong></span>
       </div>
     </a>
   `;
@@ -198,17 +142,17 @@ function toWrappedCard(w) {
     <a class="entity-card" href="#/token/${encodeURIComponent(w.tokenId || w.symbol)}">
       <div class="entity-head">
         <div class="entity-logo">
-          <img src="${escape(logoUrlFor(w))}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initials(w.symbol))}'}))">
+          <img src="${escape(logoUrlFor(w))}" alt=""
+               onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initials(w.symbol))}'}))">
         </div>
         <div>
-          <div class="entity-title">${escape(w.symbol)} <span class="badge badge-verified">wrapped</span></div>
+          <div class="entity-title">${escape(w.symbol)} ${goldCheckHTML()}</div>
           <div class="entity-sub">${escape(w.name || '')}</div>
         </div>
       </div>
       <p class="entity-body">Home chain: <strong>${escape(w.homeChain)}</strong></p>
       <div class="entity-meta">
         <span>tokenId: <strong>${escape(short(w.tokenId || ''))}</strong></span>
-        <span>Issuer: <strong>${escape(w.issuer || '')}</strong></span>
       </div>
     </a>
   `;
@@ -220,7 +164,7 @@ function toNftCard(n) {
       <div class="entity-head">
         <div class="entity-logo">N</div>
         <div>
-          <div class="entity-title">${escape(n.name || n.symbol)}</div>
+          <div class="entity-title">${escape(n.name || n.symbol)} ${goldCheckHTML()}</div>
           <div class="entity-sub">${escape(short(n.tokenId || ''))}</div>
         </div>
       </div>
@@ -229,6 +173,57 @@ function toNftCard(n) {
   `;
 }
 
+function toContractCard(c) {
+  const cid = c.contractId || c.id || c.codeHash || '';
+  const dest = cid ? '#/contract/' + encodeURIComponent(cid) : '#/contracts';
+  const isLive = !c._seeded && (c.codeHash || c.contractId);
+  return `
+    <a class="entity-card" href="${dest}">
+      <div class="entity-head">
+        <div class="entity-logo">C</div>
+        <div>
+          <div class="entity-title">${escape(c.name || 'Unnamed')}</div>
+          <div class="entity-sub">${cid ? escape(short(cid)) : escape(c.sourceUrl ? new URL(c.sourceUrl, 'https://x').pathname.split('/').slice(-1)[0] : '—')}</div>
+        </div>
+      </div>
+      <p class="entity-body">${escape(c.role || c.description || 'On-chain contract.')}</p>
+      <div class="entity-meta">
+        ${c.codeHash ? `<span>codeHash: <strong>${escape(short(c.codeHash))}</strong></span>` : ''}
+        ${c.version ? `<span>v${escape(String(c.version))}</span>` : ''}
+        <span class="badge ${isLive ? 'badge-success' : 'badge-muted'}">${isLive ? 'on chain' : 'backend module'}</span>
+      </div>
+    </a>
+  `;
+}
+
+function toSiteCard(s) {
+  return `
+    <a class="entity-card" href="#/site/${encodeURIComponent(s.domain)}">
+      <div class="entity-head">
+        <div class="entity-logo">${escape(initials(s.domain))}</div>
+        <div>
+          <div class="entity-title">${escape(s.domain)} ${goldCheckHTML()}</div>
+          <div class="entity-sub">v${escape(String(s.version || '?'))}</div>
+        </div>
+      </div>
+      <div class="entity-meta">
+        ${s.size_bytes ? `<span>${(Number(s.size_bytes)/1024).toFixed(1)} KB gz</span>` : ''}
+        ${s.generated_at ? `<span>${escape(s.generated_at)}</span>` : ''}
+      </div>
+    </a>
+  `;
+}
+
+// ─── helpers ─────────────────────────────────────────────────────
+
+function sourceTag(src) {
+  if (!src) return '';
+  if (src === 'indexer') return ' · <span style="color:var(--success)">live</span>';
+  if (src === 'cache')   return ' · <span style="color:var(--text-muted)">cached</span>';
+  if (src === 'offline') return ' · <span style="color:var(--warning)">indexer offline</span>';
+  if (src === 'fallback')return ' · <span style="color:var(--warning)">registry fallback</span>';
+  return '';
+}
 function short(s, lead = 10, trail = 6) {
   if (!s) return '—';
   if (s.length <= lead + trail + 3) return s;
@@ -237,7 +232,4 @@ function short(s, lead = 10, trail = 6) {
 function initials(name) {
   if (!name) return '?';
   return name.split(/[\s-_/.]+/).filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join('');
-}
-function escape(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

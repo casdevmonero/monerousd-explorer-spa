@@ -3,14 +3,21 @@
 // Validators are members of the FROST signer set that custodies
 // wrapped-asset deposits. Their bonds are public, their signal
 // records are public, slashing events are public. None of this
-// requires view-key disclosure — it's all on chain by construction.
+// requires view-key disclosure — all on chain by construction.
 //
-// Endpoint: /v1/bridge/validators (falls back to /v1/validators).
-// Soft-fails to a "endpoint not deployed yet" empty state if the
-// indexer doesn't have it; everything else still renders.
+// Data pulled via lib/ecosystem.js::getValidators() which tries
+// three endpoint shapes (`/v1/bridge/validators`, `/v1/validators`,
+// `/v1/governance/validators`) with 30 s cache + soft-fail.
+//
+// On total failure (every endpoint 502s) we still render the page
+// with a "Coming soon" empty state explaining that the validator
+// register hasn't been deployed to the federated indexer yet — the
+// page is never blank.
+
+import { getValidators } from '../lib/ecosystem.js';
 
 export async function renderValidators(ctx) {
-  const { ds, view } = ctx;
+  const { view } = ctx;
 
   view.innerHTML = `
     <header class="hero" style="padding:26px 28px">
@@ -22,10 +29,10 @@ export async function renderValidators(ctx) {
     </header>
 
     <div class="stat-grid" id="val-stats">
-      <div class="stat-tile"><div class="stat-tile-label">Active</div><div class="stat-tile-value">—</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">Total bond</div><div class="stat-tile-value">—</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">Min bond</div><div class="stat-tile-value">—</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">Slashed (90d)</div><div class="stat-tile-value">—</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">Active</div><div class="stat-tile-value" id="val-active">—</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">Total bond</div><div class="stat-tile-value" id="val-bond">—</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">Min bond</div><div class="stat-tile-value" id="val-min">—</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">Slashed (90d)</div><div class="stat-tile-value" id="val-slashed">—</div></div>
     </div>
 
     <section class="card">
@@ -37,45 +44,40 @@ export async function renderValidators(ctx) {
     </section>
   `;
 
-  await load(ctx);
-}
-
-async function load(ctx) {
-  const { ds, view } = ctx;
+  const r = await getValidators();
+  const list = r.data || [];
   const body = view.querySelector('#val-body');
   const action = view.querySelector('#val-action');
-  let r = null;
-  try { r = await ds.getValidators(); } catch (_) {}
-  if (!r) {
-    if (action) action.textContent = 'endpoint unavailable';
+
+  if (!list.length) {
+    if (action) action.textContent = r.error ? 'indexer offline' : 'endpoint unavailable';
     body.innerHTML = `
       <div class="empty">
-        The validator-list endpoint hasn't been deployed yet on the
-        federated indexer. Once <code>/v1/bridge/validators</code> goes live
-        it'll auto-render here — no code change needed.
+        ${r.error
+          ? '<strong>Indexer unreachable.</strong><br>Validator data is on chain — when any federated indexer reports `/v1/bridge/validators` the page will auto-populate on refresh.'
+          : 'The bonded validator set hasn\'t been seeded on the federated indexer yet.'}
+        <div class="hint">
+          Validators stake USDm in <a href="#/contract/BridgeValidatorBond">BridgeValidatorBond</a>
+          and are added to the FROST signer group via DKG2.
+          Read more in <a href="#/privacy">/privacy</a>.
+        </div>
       </div>
     `;
     return;
   }
 
-  const list = Array.isArray(r) ? r : (r.validators || r.items || []);
+  // Compute aggregate stats.
   const active = list.filter(v => v.status === 'active' || v.active);
   const total  = list.reduce((s, v) => s + Number(v.bond_atomic || v.bond || 0), 0);
   const minBond = list.reduce((m, v) => Math.min(m, Number(v.bond_atomic || v.bond || Infinity)), Infinity);
   const slashed = list.reduce((s, v) => s + (Number(v.slashed_atomic || v.slashed || 0) ? 1 : 0), 0);
 
-  // Update stat tiles.
-  const stats = view.querySelectorAll('#val-stats .stat-tile-value');
-  if (stats[0]) stats[0].textContent = active.length.toLocaleString('en-US');
-  if (stats[1]) stats[1].textContent = (total / 1e8).toFixed(2) + ' USDm';
-  if (stats[2]) stats[2].textContent = isFinite(minBond) ? (minBond / 1e8).toFixed(2) + ' USDm' : '—';
-  if (stats[3]) stats[3].textContent = slashed.toLocaleString('en-US');
+  view.querySelector('#val-active').textContent  = active.length.toLocaleString('en-US');
+  view.querySelector('#val-bond').textContent    = (total / 1e8).toFixed(2) + ' USDm';
+  view.querySelector('#val-min').textContent     = isFinite(minBond) ? (minBond / 1e8).toFixed(2) + ' USDm' : '—';
+  view.querySelector('#val-slashed').textContent = slashed.toLocaleString('en-US');
 
-  if (action) action.textContent = list.length + ' validators';
-  if (!list.length) {
-    body.innerHTML = '<div class="empty">No validators bonded yet.</div>';
-    return;
-  }
+  if (action) action.textContent = `${list.length} validators · ${sourceLabel(r.source)}`;
 
   body.innerHTML = `
     <div class="table-wrap">
@@ -107,6 +109,11 @@ async function load(ctx) {
   `;
 }
 
+function sourceLabel(s) {
+  if (s === 'indexer') return '<span style="color:var(--success)">live</span>';
+  if (s === 'cache')   return '<span style="color:var(--text-muted)">cached</span>';
+  return s || '—';
+}
 function statusBadge(s) {
   s = (s || '').toLowerCase();
   if (s === 'active')   return '<span class="badge badge-success">active</span>';

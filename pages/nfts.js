@@ -8,6 +8,7 @@
 // the raw on-chain metadata.
 
 import { VERIFIED_NFTS, logoUrlFor } from '../lib/registries.js';
+import { goldCheckHTML } from '../lib/helpers.js';
 
 export async function renderNfts(ctx) {
   const { ds, view } = ctx;
@@ -88,7 +89,7 @@ function nftCard(n, verified) {
         <div>
           <div class="entity-title">
             ${escape(n.name || sym)}
-            ${verified ? '<span class="badge badge-verified">verified</span>' : ''}
+            ${verified ? goldCheckHTML() : ''}
           </div>
           <div class="entity-sub">${escape(short(tokenId))}</div>
         </div>

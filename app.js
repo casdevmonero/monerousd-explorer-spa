@@ -11,6 +11,7 @@ import * as ds from './lib/data-source.js';
 import * as H  from './lib/helpers.js';
 import { primeIndex, searchLocal, groupByKind, initialsFor } from './lib/search-index.js';
 import { logoUrlFor } from './lib/registries.js';
+import { goldCheckHTML } from './lib/helpers.js';
 
 import { renderHome }       from './pages/home.js';
 import { renderBlock }      from './pages/block.js';
@@ -215,10 +216,21 @@ function renderDropdown(entries) {
 
 function searchResultHTML(e, idx) {
   const isActive = idx === _dropdownActiveIdx ? ' active' : '';
-  const logo = e.logo
-    ? `<img src="${escape(e.logo)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initialsFor(e.label))}'}))">`
-    : `<span>${escape(initialsFor(e.label))}</span>`;
-  const badge = e.badge ? `<span class="search-result-badge">${escape(e.badge)}</span>` : '';
+  // Logo: real image (token logo) OR letter-initials fallback OR
+  // a kind-specific icon (tx/block/address suggestions).
+  let logo;
+  if (e.logo) {
+    logo = `<img src="${escape(e.logo)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escape(initialsFor(e.label))}'}))">`;
+  } else if (e.iconGlyph) {
+    logo = `<span aria-hidden="true">${e.iconGlyph}</span>`;
+  } else {
+    logo = `<span>${escape(initialsFor(e.label))}</span>`;
+  }
+  // Verified entries get a gold-check; non-verified status (e.g.
+  // "tx hash", "address", "block") gets the small text pill.
+  const badge = e.badge === 'verified'
+    ? goldCheckHTML()
+    : (e.badge ? `<span class="search-result-badge">${escape(e.badge)}</span>` : '');
   return `
     <div class="search-result${isActive}" role="option" data-href="${escape(e.href)}" data-idx="${idx}">
       <div class="search-result-logo">${logo}</div>
