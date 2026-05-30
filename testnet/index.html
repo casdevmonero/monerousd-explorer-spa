@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MoneroUSD Explorer</title>
+  <meta name="description" content="Sovereign block explorer for the MoneroUSD chain. Privacy-preserving by design — searches tokens, NFTs, wrapped assets, contracts, organizations, and sovereign sites without leaking address-level activity.">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="color-scheme" content="dark">
+
+  <!-- CSP — same-origin scripts, monerousd.org indexer family for
+       reads, ion.monerousd.org for token logos. No CDN, no eval. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src  'self';
+    style-src   'self' 'unsafe-inline';
+    img-src     'self' data: https://ion.monerousd.org;
+    connect-src 'self' https://*.monerousd.org;
+    base-uri    'self';
+    form-action 'self';
+    frame-ancestors 'none';
+  ">
+
+  <link rel="stylesheet" href="/styles/theme.css?v=229">
+  <style>
+    /* Boot loader — static MoneroUSD coin, orange ring orbits.
+       Ported from the legacy explorer header (v1.2.132 redesign). */
+    #usdm-loader {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at center, #0e0e0e 0%, #000 80%);
+      transition: opacity .25s ease, visibility .25s ease;
+    }
+    #usdm-loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    .usdm-loader-stage {
+      position: relative;
+      width: 128px; height: 128px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .usdm-loader-logo {
+      width: 96px; height: 96px;
+      filter: drop-shadow(0 0 14px rgba(255,102,0,0.45));
+    }
+    .usdm-loader-ring {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      background: conic-gradient(
+        from 0deg,
+        rgba(255,102,0,0.95) 0deg,
+        rgba(255,102,0,0.55) 40deg,
+        rgba(255,102,0,0.15) 90deg,
+        rgba(255,102,0,0)    180deg,
+        rgba(255,102,0,0)    360deg);
+      -webkit-mask: radial-gradient(circle, transparent 56px, #000 58px, #000 62px, transparent 64px);
+              mask: radial-gradient(circle, transparent 56px, #000 58px, #000 62px, transparent 64px);
+      animation: usdm-ring-spin 1.4s linear infinite;
+    }
+    @keyframes usdm-ring-spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .usdm-loader-label {
+      position: absolute; bottom: 38%;
+      font-family: var(--font-ui, system-ui);
+      font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(255,102,0,0.78);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .usdm-loader-ring { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════ Boot loader ════════════════════════════════════════════ -->
+  <div id="usdm-loader" aria-hidden="true">
+    <div class="usdm-loader-stage">
+      <div class="usdm-loader-ring" aria-hidden="true"></div>
+      <svg class="usdm-loader-logo" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"
+           role="img" aria-label="MoneroUSD">
+        <defs>
+          <linearGradient id="usdm-outer" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#888"/>
+            <stop offset="50%" stop-color="#555"/>
+            <stop offset="100%" stop-color="#333"/>
+          </linearGradient>
+          <radialGradient id="usdm-face" cx="50%" cy="38%" r="55%">
+            <stop offset="0%" stop-color="#4d4d4d"/>
+            <stop offset="100%" stop-color="#2a2a2a"/>
+          </radialGradient>
+          <linearGradient id="usdm-m" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#FF8533"/>
+            <stop offset="50%" stop-color="#FF6600"/>
+            <stop offset="100%" stop-color="#E65800"/>
+          </linearGradient>
+        </defs>
+        <circle cx="128" cy="128" r="120" fill="url(#usdm-outer)" stroke="#333" stroke-width="2"/>
+        <circle cx="128" cy="128" r="102" fill="url(#usdm-face)"/>
+        <polygon points="62,178 62,89 128,155 194,89 194,178 176,178 176,119 128,167 80,119 80,178" fill="url(#usdm-m)"/>
+        <rect x="42" y="162" width="38" height="16" rx="2" fill="url(#usdm-m)"/>
+        <rect x="176" y="162" width="38" height="16" rx="2" fill="url(#usdm-m)"/>
+      </svg>
+    </div>
+    <div class="usdm-loader-label">Loading</div>
+  </div>
+
+  <!-- ════ Sticky glass header ═══════════════════════════════════ -->
+  <header>
+    <div class="container header-inner">
+      <a href="#/" class="logo" aria-label="MoneroUSD Explorer home">
+        <svg class="logo-mark" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <linearGradient id="logo-m" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#FF8533"/>
+              <stop offset="100%" stop-color="#E65800"/>
+            </linearGradient>
+          </defs>
+          <circle cx="128" cy="128" r="118" fill="#0a0a0a" stroke="#FF6600" stroke-width="6"/>
+          <polygon points="62,180 62,86 128,156 194,86 194,180 176,180 176,118 128,170 80,118 80,180" fill="url(#logo-m)"/>
+        </svg>
+        <span>MoneroUSD <span class="logo-sub">Explorer</span></span>
+      </a>
+
+      <nav class="header-nav" aria-label="Primary navigation">
+        <a href="#/"            class="header-nav-link">Home</a>
+        <a href="#/tokens"      class="header-nav-link">Tokens</a>
+        <a href="#/wrapped"     class="header-nav-link">Wrapped</a>
+        <a href="#/nfts"        class="header-nav-link">NFTs</a>
+        <a href="#/contracts"   class="header-nav-link collapse-md">Contracts</a>
+        <a href="#/orgs"        class="header-nav-link">Orgs</a>
+        <a href="#/sites"       class="header-nav-link collapse-md">Sites</a>
+        <a href="#/validators"  class="header-nav-link collapse-md">Validators</a>
+        <a href="#/privacy"     class="header-nav-link collapse-md">Privacy</a>
+      </nav>
+
+      <form class="search-form" id="search-form" onsubmit="return false;" role="search">
+        <div class="search-wrapper">
+          <input type="text"
+                 id="search-input"
+                 placeholder="Search tokens, NFTs, contracts, orgs, hashes…"
+                 autocomplete="off"
+                 spellcheck="false"
+                 aria-label="Search">
+          <div class="search-dropdown" id="search-dropdown" role="listbox"></div>
+        </div>
+        <button type="submit" id="search-btn" aria-hidden="true" tabindex="-1">Search</button>
+      </form>
+
+      <label class="network-switch" id="network-switch" title="Switch network — testnet lives at /testnet">
+        <select id="network-select" aria-label="Select network">
+          <option value="mainnet">Mainnet</option>
+          <option value="testnet">Testnet</option>
+        </select>
+        <svg class="network-switch-caret" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </label>
+
+      <span class="source-pill connecting" id="source-pill" title="Active data source">
+        connecting…
+      </span>
+    </div>
+  </header>
+
+  <!-- ════ Testnet banner (shown only on /testnet) ═══════════════ -->
+  <div class="testnet-banner" id="testnet-banner" role="status" hidden>
+    <span class="testnet-banner-dot" aria-hidden="true"></span>
+    <strong>Testnet</strong>
+    <span>— a separate, production-equivalent chain. Coins here carry no value. You're viewing
+      <code>explorer.monerousd.org/testnet</code>.</span>
+    <a href="#/" class="testnet-banner-exit" id="testnet-banner-exit">← Back to Mainnet</a>
+  </div>
+
+  <!-- ════ Main viewport (rendered by app.js) ════════════════════ -->
+  <main class="container" id="view" role="main">
+    <div class="loading">Loading…</div>
+  </main>
+
+  <!-- ════ Mobile bottom nav (≤880 px) ═══════════════════════════ -->
+  <nav class="mobile-nav" aria-label="Mobile navigation">
+    <div class="mobile-nav-inner container" style="padding:0">
+      <a href="#/" class="mobile-nav-link" data-mobile-route="">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
+        Home
+      </a>
+      <a href="#/tokens" class="mobile-nav-link" data-mobile-route="/tokens">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 9h5a2 2 0 010 4H9m0 0h6"/></svg>
+        Tokens
+      </a>
+      <a href="#/wrapped" class="mobile-nav-link" data-mobile-route="/wrapped">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>
+        Wrapped
+      </a>
+      <a href="#/orgs" class="mobile-nav-link" data-mobile-route="/orgs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V5a2 2 0 012-2h6v18M11 21V11h8v10M7 7h2M7 11h2M7 15h2M15 13h2M15 17h2"/></svg>
+        Orgs
+      </a>
+      <a href="#/privacy" class="mobile-nav-link" data-mobile-route="/privacy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Privacy
+      </a>
+    </div>
+  </nav>
+
+  <!-- ════ Footer ════════════════════════════════════════════════ -->
+  <footer>
+    <div class="container">
+      <p>
+        MoneroUSD Block Explorer · FCMP++ privacy by design ·
+        <span id="footer-source">connecting…</span>
+        &middot; <a href="#/privacy">What's concealed?</a>
+      </p>
+    </div>
+  </footer>
+
+  <script type="module" src="/app.js?v=229"></script>
+</body>
+</html>

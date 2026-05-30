@@ -21,7 +21,7 @@
     frame-ancestors 'none';
   ">
 
-  <link rel="stylesheet" href="styles/theme.css?v=228">
+  <link rel="stylesheet" href="styles/theme.css?v=229">
   <style>
     /* Boot loader — static MoneroUSD coin, orange ring orbits.
        Ported from the legacy explorer header (v1.2.132 redesign). */
@@ -146,11 +146,30 @@
         <button type="submit" id="search-btn" aria-hidden="true" tabindex="-1">Search</button>
       </form>
 
+      <label class="network-switch" id="network-switch" title="Switch network — testnet lives at /testnet">
+        <select id="network-select" aria-label="Select network">
+          <option value="mainnet">Mainnet</option>
+          <option value="testnet">Testnet</option>
+        </select>
+        <svg class="network-switch-caret" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </label>
+
       <span class="source-pill connecting" id="source-pill" title="Active data source">
         connecting…
       </span>
     </div>
   </header>
+
+  <!-- ════ Testnet banner (shown only on /testnet) ═══════════════ -->
+  <div class="testnet-banner" id="testnet-banner" role="status" hidden>
+    <span class="testnet-banner-dot" aria-hidden="true"></span>
+    <strong>Testnet</strong>
+    <span>— a separate, production-equivalent chain. Coins here carry no value. You're viewing
+      <code>explorer.monerousd.org/testnet</code>.</span>
+    <a href="#/" class="testnet-banner-exit" id="testnet-banner-exit">← Back to Mainnet</a>
+  </div>
 
   <!-- ════ Main viewport (rendered by app.js) ════════════════════ -->
   <main class="container" id="view" role="main">
@@ -194,6 +213,6 @@
     </div>
   </footer>
 
-  <script type="module" src="app.js?v=228"></script>
+  <script type="module" src="app.js?v=229"></script>
 </body>
 </html>

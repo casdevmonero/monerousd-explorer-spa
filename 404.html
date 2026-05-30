@@ -48,8 +48,16 @@
       var q = window.location.search || '';
       // Strip a leading slash so the result is '#/tx/<hash>' not '#//tx/...'.
       var route = p.replace(/^\/+/, '');
-      var target = window.location.origin + '/' +
-                   (q ? q + '#/' + route : '#/' + route);
+      // PRESERVE the /testnet path prefix. The explorer's testnet view
+      // lives at explorer.monerousd.org/testnet (single-origin routing,
+      // like Ion Swap). A deep link like /testnet/tx/<hash> must land
+      // on /testnet/#/tx/<hash> — NOT /#/testnet/tx/<hash> (which would
+      // silently drop you back to mainnet). Peel the prefix off, keep
+      // it as the base path, and hash-route only the remainder.
+      var base = '/';
+      var m = route.match(/^testnet(?:\/(.*))?$/);
+      if (m) { base = '/testnet/'; route = m[1] || ''; }
+      var target = window.location.origin + base + q + '#/' + route;
       window.location.replace(target);
     })();
   </script>
