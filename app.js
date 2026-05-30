@@ -31,14 +31,17 @@ import { renderSites }      from './pages/sites.js';
 import { renderValidators } from './pages/validators.js';
 import { renderPrivacy }    from './pages/privacy.js';
 
-const view         = document.getElementById('view');
-const sourcePill   = document.getElementById('source-pill');
-const footerSource = document.getElementById('footer-source');
-const searchInput  = document.getElementById('search-input');
-const searchForm   = document.getElementById('search-form');
-const searchBtn    = document.getElementById('search-btn');
-const dropdown     = document.getElementById('search-dropdown');
-const loader       = document.getElementById('usdm-loader');
+const view          = document.getElementById('view');
+const sourcePill    = document.getElementById('source-pill');
+const footerSource  = document.getElementById('footer-source');
+const searchInput   = document.getElementById('search-input');
+const searchForm    = document.getElementById('search-form');
+const searchBtn     = document.getElementById('search-btn');
+const dropdown      = document.getElementById('search-dropdown');
+const loader        = document.getElementById('usdm-loader');
+const networkSwitch = document.getElementById('network-switch');
+const networkSelect = document.getElementById('network-select');
+const testnetBanner = document.getElementById('testnet-banner');
 
 // ── routes ─────────────────────────────────────────────────────────
 
@@ -192,6 +195,42 @@ async function probeSource() {
   }
 }
 
+// ── network switch (Mainnet / Testnet via /testnet path prefix) ─────
+//
+// Network is derived from the URL path (ds.getNetwork()), so the only
+// job here is to reflect it in the header control + banner, and to
+// turn a selection into a real navigation to the right base path.
+function setupNetworkSwitch() {
+  const net = ds.getNetwork();
+  const testnet = net === 'testnet';
+
+  if (networkSwitch) networkSwitch.classList.toggle('testnet', testnet);
+  if (networkSelect) {
+    networkSelect.value = net;
+    networkSelect.addEventListener('change', () => {
+      const target = networkSelect.value;
+      if (target === ds.getNetwork()) return;          // already there
+      // Full navigation to the new base path ('/' or '/testnet/'),
+      // preserving the current hash route so we land on the same page.
+      location.assign(ds.networkSwitchUrl(target));
+    });
+  }
+
+  if (testnetBanner) {
+    testnetBanner.hidden = !testnet;
+    const exit = document.getElementById('testnet-banner-exit');
+    // Make the "Back to Mainnet" link a real path navigation (the
+    // static href="#/" would only change the hash, staying on /testnet).
+    if (exit) exit.setAttribute('href', ds.networkSwitchUrl('mainnet'));
+  }
+
+  // Reflect the network in the document title so a backgrounded
+  // testnet tab is distinguishable at a glance.
+  if (testnet && !/Testnet/.test(document.title)) {
+    document.title = 'Testnet · ' + document.title;
+  }
+}
+
 // ── search dropdown ─────────────────────────────────────────────────
 
 let _dropdownActiveIdx = -1;
@@ -342,6 +381,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!e.target.closest('.search-form')) closeDropdown();
   });
 
+  setupNetworkSwitch();  // reflect Mainnet/Testnet + wire the switch
   primeIndex();  // background-load custom tokens + sites
   probeSource().finally(() => {});
   dispatch();
