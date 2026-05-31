@@ -30,6 +30,7 @@ import { renderOrg }        from './pages/org.js';
 import { renderSites }      from './pages/sites.js';
 import { renderValidators } from './pages/validators.js';
 import { renderPrivacy }    from './pages/privacy.js';
+import { renderSettlements } from './pages/settlements.js';
 
 const view          = document.getElementById('view');
 const sourcePill    = document.getElementById('source-pill');
@@ -63,6 +64,7 @@ const ROUTES = [
   { match: /^#\/site\/(.+)$/,       handler: renderSite,       args: m => [decodeURIComponent(m[1])] },
   { match: /^#\/validators\/?$/,    handler: renderValidators, args: () => [] },
   { match: /^#\/privacy\/?$/,       handler: renderPrivacy,    args: () => [] },
+  { match: /^#\/l2(?:[/?].*)?$/,    handler: renderSettlements, args: () => [] },
   { match: /^#\/q\/(.+)$/,          handler: renderSearch,     args: m => [decodeURIComponent(m[1])] },
 ];
 
