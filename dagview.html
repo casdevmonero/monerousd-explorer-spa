@@ -185,7 +185,7 @@ const edgesMat = new THREE.LineBasicMaterial({ color:0xFF6600, transparent:true,
 const edgeGroup = new THREE.Group(); dag.add(edgeGroup);
 let height=0, blueN=0, redN=0, frontZ=0;
 // camera-mode flow state (phase 2 wires focus/scrub/search to these)
-let viewMode='live', focusBlk=null, camZ=70, scrubZ=0, orbitAz=0, orbitEl=0.18, _drag=null, _dragged=false, _lastT=0; const blocksByNum=new Map();
+let viewMode='live', focusBlk=null, camZ=70, scrubZ=0, orbitAz=0, orbitEl=0.18, _drag=null, _dragged=false, _userOrbited=false, _lastT=0; const blocksByNum=new Map();
 
 function addBlock(isBlue, parentRefs, h){
   const lane = (Math.random()-0.5)*46, lift=(Math.random()-0.5)*30;
@@ -287,7 +287,7 @@ function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime
   else targetZ = frontZ + 120;                       // live: stay just ahead of the newest batch -> never empties
   camZ += (targetZ - camZ) * (viewMode==='live'?0.05:0.10);
   // click-drag 360 orbit around the look-at (0,0,camZ); auto-drifts slowly when idle
-  if(!_drag) orbitAz += 0.0016;
+  if(!_drag && !_userOrbited) orbitAz += 0.0016;
   const R = (viewMode==='focus')?64:100, ce=Math.cos(orbitEl);
   camera.position.x = Math.sin(orbitAz)*ce*R;
   camera.position.y = 8 + Math.sin(orbitEl)*R;
@@ -326,7 +326,21 @@ animate();
     const hit=ray.intersectObjects(blocks.map(b=>b.mesh).filter(Boolean),true)[0];
     if(hit){ const o=hit.object, b=blocks.find(x=>x.mesh===o||x.mesh===o.parent); if(b) focusOn(b); } }
   sIn.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const b=blocksByNum.get(parseInt(sIn.value,10));
-    if(b){ focusOn(b); sIn.blur(); } else { sIn.style.color='#ef4444'; setTimeout(function(){sIn.style.color='#f0eeea';},700); } } });
+    if(b){ focusOn(b); sug.style.display='none'; sIn.blur(); } else { sIn.style.color='#ef4444'; setTimeout(function(){sIn.style.color='#f0eeea';},700); } } });
+  // keystroke-based clickable autocomplete of matching batch numbers
+  const sug=document.createElement('div'); sug.id='bsuggest';
+  sug.style.cssText='position:fixed;z-index:15;display:none;background:rgba(20,20,20,.97);border:1px solid rgba(255,102,0,.30);border-radius:11px;overflow-y:auto;box-shadow:0 14px 44px rgba(0,0,0,.6);backdrop-filter:blur(12px);min-width:168px;max-height:248px';
+  document.body.appendChild(sug);
+  function renderSuggest(){ const q=(sIn.value||'').trim(); if(!q){ sug.style.display='none'; return; }
+    const ms=[...blocksByNum.keys()].filter(h=>(''+h).startsWith(q)).sort((a,b)=>b-a).slice(0,7);
+    if(!ms.length){ sug.style.display='none'; return; }
+    sug.innerHTML=ms.map(h=>{ const b=blocksByNum.get(h), c=b.isBlue?'#FF6600':'#ef4444';
+      return '<div class="bsg" data-h="'+h+'" style="cursor:pointer;padding:8px 13px;display:flex;align-items:center;gap:9px;border-bottom:1px solid rgba(255,255,255,.05);font:600 12px JetBrains Mono,monospace;color:#f0eeea"><span style="width:7px;height:7px;border-radius:50%;background:'+c+';flex:0 0 auto"></span>Batch #'+h+'<span style="margin-left:auto;color:#6f6c66;font:500 10px Inter">'+(b.txs?b.txs.toLocaleString():'')+' tx</span></div>'; }).join('');
+    const r=bar.getBoundingClientRect(); sug.style.left=r.left+'px'; sug.style.top=(r.bottom+7)+'px'; sug.style.width=r.width+'px'; sug.style.display='block';
+    sug.querySelectorAll('.bsg').forEach(el=>{ el.onmouseenter=()=>{el.style.background='rgba(255,102,0,.13)';}; el.onmouseleave=()=>{el.style.background='transparent';};
+      el.onmousedown=ev=>{ ev.preventDefault(); const b=blocksByNum.get(parseInt(el.dataset.h,10)); if(b){ sIn.value=el.dataset.h; focusOn(b); sug.style.display='none'; sIn.blur(); } }; }); }
+  sIn.addEventListener('input',renderSuggest); sIn.addEventListener('focus',renderSuggest);
+  sIn.addEventListener('blur',()=>setTimeout(()=>{ sug.style.display='none'; },200));
   latBtn.addEventListener('click',resume);
   scr.addEventListener('input',function(){ if(!blocks.length)return; if(+scr.value>=99){ resume(); return; }
     const lo=blocks[0].h, hi=blocks[blocks.length-1].h, target=Math.round(lo+(hi-lo)*(+scr.value)/100);
@@ -337,7 +351,7 @@ animate();
   addEventListener('click',pick);
   const cv=renderer.domElement;
   cv.addEventListener('pointerdown',function(e){ if(bar.contains(e.target)||sb.contains(e.target)||pop.contains(e.target))return; _drag={x:e.clientX,y:e.clientY,az:orbitAz,el:orbitEl}; _dragged=false; });
-  addEventListener('pointermove',function(e){ if(!_drag)return; const ddx=e.clientX-_drag.x, ddy=e.clientY-_drag.y; if(Math.abs(ddx)+Math.abs(ddy)>4)_dragged=true; orbitAz=_drag.az+ddx*0.006; orbitEl=Math.max(-1.35,Math.min(1.35,_drag.el-ddy*0.006)); });
+  addEventListener('pointermove',function(e){ if(!_drag)return; const ddx=e.clientX-_drag.x, ddy=e.clientY-_drag.y; if(Math.abs(ddx)+Math.abs(ddy)>4){_dragged=true; _userOrbited=true;} orbitAz=_drag.az+ddx*0.006; orbitEl=Math.max(-1.35,Math.min(1.35,_drag.el-ddy*0.006)); });
   addEventListener('pointerup',function(){ _drag=null; });
 })();
 </script>
