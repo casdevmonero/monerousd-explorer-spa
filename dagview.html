@@ -8,8 +8,8 @@
   :root{ --cyan:#FF6600; --blue:#FF8533; --red:#ef4444; --gold:#ffb347; --ink:#0a0a0a; }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{ height:100%; background:var(--ink); color:#f0eeea;
-    font-family:'Inter',-apple-system,system-ui,'Segoe UI',sans-serif; overflow:hidden; }
-  #c{ position:fixed; inset:0; display:block; }
+    font-family:'Inter',-apple-system,system-ui,'Segoe UI',sans-serif; overflow:hidden; overscroll-behavior:none; }
+  #c{ position:fixed; inset:0; display:block; touch-action:none; }
   .ui{ position:fixed; z-index:10; pointer-events:none; }
   /* top bar */
   #top{ top:0; left:0; right:0; display:flex; align-items:center; justify-content:space-between;
@@ -98,7 +98,7 @@
 
 <div id="stats" class="ui">
   <div class="stat"><div class="k">DAG Height</div><div class="v" id="sHeight">0</div></div>
-  <div class="stat"><div class="k">Blocks</div><div class="v" id="sBlocks">0</div></div>
+  <div class="stat"><div class="k">Spends Settled</div><div class="v" id="sBlocks">0</div></div>
   <div class="stat"><div class="k">Selected / Red</div><div class="v" id="sBR">0 / 0</div></div>
   <div class="stat tps"><div class="k">Live TPS</div><div class="v" id="sTps">0<small> tx/s</small></div></div>
 </div>
@@ -213,7 +213,12 @@ const shoot = (function(){
     g.userData={s:0.0008+Math.random()*0.0022}; scene.add(g); list.push(g); zc-=1100+Math.random()*700;
   });
   const span=list.length*1500;
-  window._solar=function(cz){ for(const g of list){ g.rotation.y+=g.userData.s; if(g.position.z>cz+260){ g.position.z-=span; g.position.x=(Math.random()-0.5)*1500; g.position.y=(Math.random()-0.5)*760-40; } } };
+  // universal + persistent solar phase: the centred body is a pure function of wall-clock time (Date.now()),
+  // so every viewer worldwide sees the same planet and re-opening DAG view resumes correctly (no restart-from-the-sun).
+  const _GAP=span/list.length, _CYC=360000;   // ~6 min to traverse the system (~36s per body)
+  window._solar=function(cz){ const flow=((Date.now()/_CYC)%1)*span;
+    for(let i=0;i<list.length;i++){ const g=list[i]; g.rotation.y+=g.userData.s;
+      g.position.z = cz + 300 - ((( i*_GAP - flow )%span+span)%span); } };
   // click a planet -> name + educational popover
   const _pray=new THREE.Raycaster(), _pm=new THREE.Vector2();
   const ppop=document.createElement('div'); ppop.id='planetpop';
@@ -273,13 +278,18 @@ function rndHash(){ const x='0123456789abcdef'; let s=''; for(let i=0;i<64;i++) 
 
 // ---- growth: live data if reachable, else a faithful GHOSTDAG simulation ----
 let liveOk=false, txWindow=[];
+// ---- LIVE FLOOD: poll the real settlement engine and drive the HUD from MEASURED numbers (sim is only the fallback) ----
+window._flood=null;
+async function pollFlood(){ try{ const r=await fetch('https://benchmark.monerousd.org/api/benchmark/status',{signal:AbortSignal.timeout(2800)});
+    if(r.ok){ window._flood=await r.json(); } }catch(e){} }
+pollFlood(); setInterval(pollFlood, 2000);
 function spawn(isBlue){
   const k = 1 + ((Math.random()*3)|0);                 // 1-3 parents (multi-parent DAG)
   const refs=[]; const pool=tips.slice().sort(()=>Math.random()-0.5);
   for(let i=0;i<Math.min(k,pool.length);i++) refs.push(pool[i]);
   const blk=addBlock(isBlue, refs, ++height); blocksByNum.set(blk.h, blk);
   // simulate this block's tx count -> live TPS
-  const txs = (25 + ((Math.random()*8)|0)) * 4096; blk.txs = txs;  // L2-batched: ~25-32 aggregate settlements/block x N=4096 spends (flat O(1) verify) -> ~90k+ effective TPS
+  const txs = (window._flood && window._flood.batchSize) ? window._flood.batchSize : (25 + ((Math.random()*8)|0)) * 4096; blk.txs = txs;  // real settlement batch size from the live flood when reachable
   txWindow.push({t:performance.now(), n:txs});
   prependRow(blk, txs);
 }
@@ -299,7 +309,7 @@ function prependRow(blk, txs){
   const row=document.createElement('div'); row.className='row';
   row.innerHTML=`<div class="h">#${blk.h}</div>
     <div class="hash">${blk.hash}</div>
-    <div class="par">↳ ${blk.parents.length} parent${blk.parents.length!==1?'s':''} · ${txs} tx</div>
+    <div class="par">↳ ${blk.parents.length} parent${blk.parents.length!==1?'s':''} · ${txs.toLocaleString()} spends${window._flood&&window._flood.verifyMs?' · verify '+window._flood.verifyMs.toFixed(0)+'ms':''}</div>
     <div class="tag ${blk.isBlue?'blue':'red'}">${blk.isBlue?'BLUE':'RED ⊘'}</div>`;
   blocksEl.prepend(row); while(blocksEl.children.length>60) blocksEl.lastChild.remove();
 }
@@ -320,7 +330,12 @@ setTimeout(()=>{ setKnob(dBtn); document.getElementById('title').style.opacity=1
 
 // ---- stats + animate ----
 const $=id=>document.getElementById(id);
-function stats(){ const now=performance.now(); txWindow=txWindow.filter(w=>now-w.t<3000);
+function stats(){ const f=window._flood;
+  if(f){ $('sTps').innerHTML=(f.tps||0).toLocaleString()+'<small> tx/s</small>';
+    $('sHeight').textContent=(f.blocks||0).toLocaleString();
+    $('sBlocks').textContent=(f.spendsSettled||0).toLocaleString();
+    $('sBR').textContent=blueN.toLocaleString()+' / '+redN.toLocaleString(); return; }
+  const now=performance.now(); txWindow=txWindow.filter(w=>now-w.t<3000);
   const tps=Math.round(txWindow.reduce((a,w)=>a+w.n,0)/3);
   $('sHeight').textContent=height.toLocaleString(); $('sBlocks').textContent=blocks.length;
   $('sBR').textContent=blueN.toLocaleString()+' / '+redN.toLocaleString();
@@ -405,9 +420,11 @@ animate();
   try{ renderer.domElement.style.cursor='crosshair'; }catch(e){}
   addEventListener('click',pick);
   const cv=renderer.domElement;
-  cv.addEventListener('pointerdown',function(e){ if(bar.contains(e.target)||sb.contains(e.target)||pop.contains(e.target))return; _drag={x:e.clientX,y:e.clientY,az:orbitAz,el:orbitEl}; _dragged=false; });
-  addEventListener('pointermove',function(e){ if(!_drag)return; const ddx=e.clientX-_drag.x, ddy=e.clientY-_drag.y; if(Math.abs(ddx)+Math.abs(ddy)>4){_dragged=true; _userOrbited=true;} orbitAz=_drag.az+ddx*0.006; orbitEl=Math.max(-1.35,Math.min(1.35,_drag.el-ddy*0.006)); });
-  addEventListener('pointerup',function(){ _drag=null; });
+  const _tps=new Set();
+  cv.addEventListener('pointerdown',function(e){ if(e.pointerType==='touch')_tps.add(e.pointerId); if(_tps.size>=2){_drag=null;return;} if(bar.contains(e.target)||sb.contains(e.target)||pop.contains(e.target))return; _drag={x:e.clientX,y:e.clientY,az:orbitAz,el:orbitEl}; _dragged=false; });
+  addEventListener('pointermove',function(e){ if(!_drag||_tps.size>=2)return; const ddx=e.clientX-_drag.x, ddy=e.clientY-_drag.y; if(Math.abs(ddx)+Math.abs(ddy)>4){_dragged=true; _userOrbited=true;} orbitAz=_drag.az+ddx*0.006; orbitEl=Math.max(-1.35,Math.min(1.35,_drag.el-ddy*0.006)); });
+  function _tpEnd(e){ if(e&&e.pointerType==='touch')_tps.delete(e.pointerId); _drag=null; }
+  addEventListener('pointerup',_tpEnd); addEventListener('pointercancel',_tpEnd);
   // mobile finger pinch-zoom
   let _pd=0;
   cv.addEventListener('touchstart',function(e){ if(e.touches.length===2){ const a=e.touches[0],b=e.touches[1]; _pd=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); } },{passive:true});
