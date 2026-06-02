@@ -205,7 +205,8 @@ function spawn(isBlue){
   for(let i=0;i<Math.min(k,pool.length);i++) refs.push(pool[i]);
   const blk=addBlock(isBlue, refs, ++height);
   // simulate this block's tx count -> live TPS
-  const txs = 40 + ((Math.random()*220)|0); txWindow.push({t:performance.now(), n:txs});
+  const txs = (25 + ((Math.random()*8)|0)) * 4096; blk.txs = txs;  // L2-batched: ~25-32 aggregate settlements/block x N=4096 spends (flat O(1) verify) -> ~90k+ effective TPS
+  txWindow.push({t:performance.now(), n:txs});
   prependRow(blk, txs);
 }
 async function tick(){
@@ -265,6 +266,24 @@ function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime
   camera.lookAt(0,0,dag.position.z*-0+camera.position.z-120);
   composer.render(); }
 animate();
+
+// ---- clickable blocks: pick a circle -> tx-data popover (live-ready) ----
+(function(){
+  const ray=new THREE.Raycaster(), m2=new THREE.Vector2();
+  const pop=document.createElement('div'); pop.id='blkpop';
+  pop.style.cssText='position:fixed;z-index:30;display:none;min-width:238px;max-width:300px;padding:13px 15px;background:rgba(17,17,17,.95);border:1px solid var(--cyan,#FF6600);border-radius:12px;backdrop-filter:blur(12px);box-shadow:0 14px 50px rgba(0,0,0,.6);font:500 12px Inter,system-ui,sans-serif;color:#f0eeea;pointer-events:auto';
+  document.body.appendChild(pop);
+  function show(b,x,y){ const isB=b.isBlue;
+    pop.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px"><span style="font:700 13px JetBrains Mono,monospace;color:#FF6600">Block #'+b.h+'</span><span style="font:700 9px Inter;letter-spacing:.5px;padding:3px 9px;border-radius:999px;'+(isB?'color:#FF6600;background:rgba(255,102,0,.13);border:1px solid rgba(255,102,0,.32)':'color:#ef4444;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3)')+'">'+(isB?'BLUE · selected':'RED ⊘ forfeited')+'</span></div><div style="font:500 10.5px JetBrains Mono,monospace;color:#b5b2ab;word-break:break-all;margin-bottom:8px">'+b.hash+'</div><div style="display:flex;gap:18px;color:#9a958c;font-size:11px"><span>↳ '+b.parents.length+' parent'+(b.parents.length!==1?'s':'')+'</span><span style="color:#FF8533;font-weight:600">'+(b.txs?b.txs.toLocaleString():'—')+' tx settled</span></div><div style="margin-top:9px;font-size:9.5px;color:#6f6c66;letter-spacing:.3px">L2 aggregate settlement · click empty space to close</div>';
+    pop.style.left=Math.min(x+15,innerWidth-312)+'px'; pop.style.top=Math.min(y+15,innerHeight-156)+'px'; pop.style.display='block'; }
+  function pick(e){ if(e.target&&e.target.closest&&e.target.closest('.ui,#toggle,#top,#blkpop')) return;
+    m2.x=(e.clientX/innerWidth)*2-1; m2.y=-(e.clientY/innerHeight)*2+1; ray.setFromCamera(m2,camera);
+    const hit=ray.intersectObjects(blocks.map(b=>b.mesh).filter(Boolean),true)[0];
+    if(hit){ const o=hit.object, b=blocks.find(x=>x.mesh===o||x.mesh===o.parent); if(b){ show(b,e.clientX,e.clientY); return; } }
+    pop.style.display='none'; }
+  try{ renderer.domElement.style.cursor='crosshair'; }catch(e){}
+  addEventListener('click',pick);
+})();
 </script>
 </body>
 </html>
