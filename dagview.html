@@ -153,15 +153,29 @@ composer.addPass(bloom);
       gl_PointSize=(1.1+tw*2.7)*(320.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
     fragmentShader:`varying float v; varying vec3 vc; void main(){ vec2 d=gl_PointCoord-0.5; float a=smoothstep(0.5,0.0,length(d));
       gl_FragColor=vec4(mix(vc,vec3(1.0),v*0.5)*v*1.28, a*(0.40+0.60*v)); }` });
-  const pts=new THREE.Points(g,m); scene.add(pts); window._stars=m;
+  const pts=new THREE.Points(g,m); scene.add(pts); window._stars=m; window._starPts=pts;
 })();
 function nebula(c,x,y,z,sz){ const cv=document.createElement('canvas'); cv.width=cv.height=256;
   const ctx=cv.getContext('2d'), gr=ctx.createRadialGradient(128,128,0,128,128,128);
   gr.addColorStop(0,c+'cc'); gr.addColorStop(.4,c+'33'); gr.addColorStop(1,c+'00');
   ctx.fillStyle=gr; ctx.fillRect(0,0,256,256);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(cv), blending:THREE.AdditiveBlending,
-    depthWrite:false, opacity:.5 })); sp.position.set(x,y,z); sp.scale.set(sz,sz,1); scene.add(sp); }
+    depthWrite:false, opacity:.14 })); sp.position.set(x,y,z); sp.scale.set(sz,sz,1); scene.add(sp); }
 nebula('#FF6600',-260,120,-500,900); nebula('#C21A1A',300,-160,-650,1100); nebula('#FFA62B',-100,-220,-300,700);
+// periodic orange shooting star streaking the far background (bg stays black)
+const shoot = (function(){
+  const mat=new THREE.LineBasicMaterial({ color:0xFF8a3a, transparent:true, opacity:0, blending:THREE.AdditiveBlending });
+  const geo=new THREE.BufferGeometry(); const pos=new Float32Array(6); geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const ln=new THREE.Line(geo,mat); ln.frustumCulled=false; scene.add(ln);
+  let next=2.2, life=0, sx=0,sy=0,sz=0, dx=0,dy=0,dz=0;
+  return function(t,dt){
+    if(life<=0){ next-=dt; if(next<=0){ const a=Math.random()*6.283; sx=Math.cos(a)*(950+Math.random()*650); sy=320+Math.random()*520; sz=-380-Math.random()*1000;
+      dx=(Math.random()-0.5)*1000; dy=-320-Math.random()*340; dz=(Math.random()-0.5)*560; life=1.0; } return; }
+    life-=dt*0.8; const p=1-life, tl=0.14;
+    pos[0]=sx+dx*p; pos[1]=sy+dy*p; pos[2]=sz+dz*p; pos[3]=sx+dx*(p-tl); pos[4]=sy+dy*(p-tl); pos[5]=sz+dz*(p-tl);
+    geo.attributes.position.needsUpdate=true; mat.opacity=Math.sin(Math.max(0,Math.min(1,life))*3.14159)*0.95;
+  };
+})();
 
 // ---- the DAG ----
 const dag = new THREE.Group(); scene.add(dag);
@@ -171,7 +185,7 @@ const edgesMat = new THREE.LineBasicMaterial({ color:0xFF6600, transparent:true,
 const edgeGroup = new THREE.Group(); dag.add(edgeGroup);
 let height=0, blueN=0, redN=0, frontZ=0;
 // camera-mode flow state (phase 2 wires focus/scrub/search to these)
-let viewMode='live', focusBlk=null, camZ=70, scrubZ=0; const blocksByNum=new Map();
+let viewMode='live', focusBlk=null, camZ=70, scrubZ=0, orbitAz=0, orbitEl=0.18, _drag=null, _dragged=false, _lastT=0; const blocksByNum=new Map();
 
 function addBlock(isBlue, parentRefs, h){
   const lane = (Math.random()-0.5)*46, lift=(Math.random()-0.5)*30;
@@ -272,9 +286,15 @@ function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime
   else if(viewMode==='scrub') targetZ = scrubZ;
   else targetZ = frontZ + 120;                       // live: stay just ahead of the newest batch -> never empties
   camZ += (targetZ - camZ) * (viewMode==='live'?0.05:0.10);
-  const back = (viewMode==='focus')?54:92, orb = (viewMode==='focus')?9:30;
-  camera.position.x = Math.sin(t*0.09)*orb; camera.position.y = 8 + Math.cos(t*0.07)*9;
-  camera.position.z = camZ + back; camera.lookAt(0, 0, camZ);
+  // click-drag 360 orbit around the look-at (0,0,camZ); auto-drifts slowly when idle
+  if(!_drag) orbitAz += 0.0016;
+  const R = (viewMode==='focus')?64:100, ce=Math.cos(orbitEl);
+  camera.position.x = Math.sin(orbitAz)*ce*R;
+  camera.position.y = 8 + Math.sin(orbitEl)*R;
+  camera.position.z = camZ + Math.cos(orbitAz)*ce*R;
+  camera.lookAt(0, 0, camZ);
+  if(window._starPts) window._starPts.position.z = camZ;          // infinite starfield rides the flow
+  const dt=t-_lastT; _lastT=t; shoot(t, (dt>0&&dt<0.2)?dt:0.016); // periodic shooting star
   composer.render(); }
 animate();
 
@@ -289,7 +309,7 @@ animate();
   bar.innerHTML='<span style="font:600 10.5px Inter;color:#6f6c66;letter-spacing:.4px;text-transform:uppercase">Batch</span><input id="bsearch" type="number" min="1" placeholder="search #" style="width:92px;background:transparent;border:0;outline:none;color:#f0eeea;font:600 12px JetBrains Mono,monospace"><button id="blatest" style="cursor:pointer;border:0;background:var(--cyan,#FF6600);color:#0a0a0a;font:700 11px Inter;letter-spacing:.2px;padding:7px 13px;border-radius:999px">Latest ▸</button>';
   document.body.appendChild(bar);
   const sb=document.createElement('div');
-  sb.style.cssText='position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:14;width:min(440px,42vw);display:flex;align-items:center;gap:11px;background:rgba(20,20,20,.6);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:8px 15px;backdrop-filter:blur(10px)';
+  sb.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:14;width:min(300px,24vw);display:flex;align-items:center;gap:11px;background:rgba(20,20,20,.6);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:8px 15px;backdrop-filter:blur(10px)';
   sb.innerHTML='<span style="font:600 9px Inter;color:#6f6c66;letter-spacing:.6px;white-space:nowrap">◂ PAST</span><input id="bscrub" type="range" min="0" max="100" value="100" style="flex:1;accent-color:#FF6600;cursor:pointer;height:3px"><span style="font:600 9px Inter;color:#6f6c66;letter-spacing:.6px;white-space:nowrap">LIVE ▸</span>';
   document.body.appendChild(sb);
   const sIn=document.getElementById('bsearch'), latBtn=document.getElementById('blatest'), scr=document.getElementById('bscrub');
@@ -300,7 +320,7 @@ animate();
     document.getElementById('bpx').onclick=resume; }
   function focusOn(b){ if(!b)return; focusBlk=b; viewMode='focus'; showPop(b); }
   function resume(){ viewMode='live'; focusBlk=null; pop.style.display='none'; scr.value=100; }
-  function pick(e){ if(bar.contains(e.target)||sb.contains(e.target)||pop.contains(e.target)) return;
+  function pick(e){ if(_dragged) return; if(bar.contains(e.target)||sb.contains(e.target)||pop.contains(e.target)) return;
     if(e.target&&e.target.closest&&e.target.closest('.ui,#toggle,#top')) return;
     m2.x=(e.clientX/innerWidth)*2-1; m2.y=-(e.clientY/innerHeight)*2+1; ray.setFromCamera(m2,camera);
     const hit=ray.intersectObjects(blocks.map(b=>b.mesh).filter(Boolean),true)[0];
@@ -315,6 +335,10 @@ animate();
   setInterval(function(){ if(viewMode==='live') scr.value=100; },800);
   try{ renderer.domElement.style.cursor='crosshair'; }catch(e){}
   addEventListener('click',pick);
+  const cv=renderer.domElement;
+  cv.addEventListener('pointerdown',function(e){ if(bar.contains(e.target)||sb.contains(e.target)||pop.contains(e.target))return; _drag={x:e.clientX,y:e.clientY,az:orbitAz,el:orbitEl}; _dragged=false; });
+  addEventListener('pointermove',function(e){ if(!_drag)return; const ddx=e.clientX-_drag.x, ddy=e.clientY-_drag.y; if(Math.abs(ddx)+Math.abs(ddy)>4)_dragged=true; orbitAz=_drag.az+ddx*0.006; orbitEl=Math.max(-1.35,Math.min(1.35,_drag.el-ddy*0.006)); });
+  addEventListener('pointerup',function(){ _drag=null; });
 })();
 </script>
 </body>
