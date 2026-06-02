@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MoneroUSD — Live BlockDAG</title>
 <style>
-  :root{ --cyan:#39e6ff; --blue:#2b7bff; --red:#ff3b6b; --gold:#ffb347; --ink:#05060e; }
+  :root{ --cyan:#FF6600; --blue:#FF8533; --red:#ef4444; --gold:#ffb347; --ink:#0a0a0a; }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{ height:100%; background:var(--ink); color:#dfe7ff;
     font-family:'Inter',-apple-system,system-ui,'Segoe UI',sans-serif; overflow:hidden; }
@@ -68,6 +68,19 @@
     background:linear-gradient(120deg,#fff,var(--cyan),var(--blue)); -webkit-background-clip:text;
     background-clip:text; -webkit-text-fill-color:transparent; }
   #title p{ color:#7e8bb8; font-size:14px; margin-top:8px; letter-spacing:2px; text-transform:uppercase; }
+
+  /* responsive HUD — the WebGL canvas auto-resizes via the resize handler */
+  @media (max-width:760px){
+    #stats{ left:10px; right:10px; bottom:12px; gap:16px 22px; padding:11px 14px; flex-wrap:wrap; justify-content:center; }
+    .stat .v{ font-size:18px; } .stat .k{ font-size:9.5px; letter-spacing:1px; }
+    #legend{ bottom:auto; top:14px; right:14px; left:auto; padding:8px 12px; gap:12px; font-size:10.5px; }
+    #top{ padding:12px 14px; } .brand{ font-size:14.5px; } #toggle button{ padding:7px 13px; font-size:11.5px; }
+  }
+  @media (max-width:430px){
+    #legend{ display:none; }
+    #stats{ gap:12px 16px; padding:10px 12px; } .stat{ flex:1 1 42%; min-width:0; text-align:center; }
+    .stat .v{ font-size:16px; }
+  }
 </style>
 </head>
 <body>
@@ -109,7 +122,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 // ---- config: live testnet endpoint (explorer proxy). Falls back to a faithful GHOSTDAG simulation. ----
 const RPC = (location.origin || '') + '/testnet/api';
 if (new URLSearchParams(location.search).has('embed')) { ['top','title'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display='none'; }); } // adjust to the explorer's block API; sim fallback otherwise
-const COL_BLUE = new THREE.Color(0x39e6ff), COL_RED = new THREE.Color(0xff3b6b), COL_SPINE = new THREE.Color(0x9be9ff);
+const COL_BLUE = new THREE.Color(0xFF6600), COL_RED = new THREE.Color(0xef4444), COL_SPINE = new THREE.Color(0xFFB066);
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
@@ -135,7 +148,7 @@ composer.addPass(bloom);
       void main(){ v=0.4+0.6*abs(sin(t*0.6+tw*30.0)); vec4 mv=modelViewMatrix*vec4(position,1.0);
       gl_PointSize=(1.0+tw*2.2)*(300.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
     fragmentShader:`varying float v; void main(){ vec2 d=gl_PointCoord-0.5; float a=smoothstep(0.5,0.0,length(d));
-      gl_FragColor=vec4(mix(vec3(0.6,0.75,1.0),vec3(1.0),v)*v, a); }` });
+      gl_FragColor=vec4(mix(vec3(1.0,0.80,0.52),vec3(1.0),v)*v, a); }` });
   const pts=new THREE.Points(g,m); scene.add(pts); window._stars=m;
 })();
 function nebula(c,x,y,z,sz){ const cv=document.createElement('canvas'); cv.width=cv.height=256;
@@ -144,13 +157,13 @@ function nebula(c,x,y,z,sz){ const cv=document.createElement('canvas'); cv.width
   ctx.fillStyle=gr; ctx.fillRect(0,0,256,256);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(cv), blending:THREE.AdditiveBlending,
     depthWrite:false, opacity:.5 })); sp.position.set(x,y,z); sp.scale.set(sz,sz,1); scene.add(sp); }
-nebula('#2b3bff',-260,120,-500,900); nebula('#7a2bff',300,-160,-650,1100); nebula('#16d6ff',-100,-220,-300,700);
+nebula('#FF6600',-260,120,-500,900); nebula('#C21A1A',300,-160,-650,1100); nebula('#FFA62B',-100,-220,-300,700);
 
 // ---- the DAG ----
 const dag = new THREE.Group(); scene.add(dag);
 const blocks=[]; const tips=[];   // tips = recent blocks new ones may reference (multi-parent)
 const nodeGeo = new THREE.IcosahedronGeometry(1.5, 1);
-const edgesMat = new THREE.LineBasicMaterial({ color:0x2b6cff, transparent:true, opacity:.32, blending:THREE.AdditiveBlending });
+const edgesMat = new THREE.LineBasicMaterial({ color:0xFF6600, transparent:true, opacity:.32, blending:THREE.AdditiveBlending });
 const edgeGroup = new THREE.Group(); dag.add(edgeGroup);
 let height=0, blueN=0, redN=0, frontZ=0;
 
