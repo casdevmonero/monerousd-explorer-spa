@@ -121,7 +121,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 
 // ---- config: live testnet endpoint (explorer proxy). Falls back to a faithful GHOSTDAG simulation. ----
 const RPC = (location.origin || '') + '/testnet/api';
-if (new URLSearchParams(location.search).has('embed')) { ['top','title'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display='none'; }); } // adjust to the explorer's block API; sim fallback otherwise
+if (new URLSearchParams(location.search).has('embed')) { ['top'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display='none'; }); } // adjust to the explorer's block API; sim fallback otherwise
 const COL_BLUE = new THREE.Color(0xFF6600), COL_RED = new THREE.Color(0xef4444), COL_SPINE = new THREE.Color(0xFFB066);
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias:true });
@@ -242,23 +242,24 @@ const shoot = (function(){
     if(d.ring){ const rg=new THREE.Mesh(new THREE.RingGeometry(d.r*1.45,d.r*2.35,72), new THREE.MeshBasicMaterial({color:0xe6d2a0,side:THREE.DoubleSide,transparent:true,opacity:0.6,fog:false})); rg.rotation.x=1.18; rg.rotation.y=0.2; g.add(rg); }
     g.userData={spin:0.0016+Math.random()*0.004, sph:sph, cloud:cloudMesh}; scene.add(g); list.push(g);
   });
-  // DISTANT BACKDROP: the sun + planets sit far out in the periphery, scattered at fixed bearings WELL OFF the
-  // central flight axis and far behind in z, so the DAG streams down the centre and NEVER passes through them.
-  // They drift very slowly + spin; their cloud/atmosphere layers rotate independently so the worlds look alive.
-  list.forEach((g,i)=>{ const u=g.userData;
-    u.bear = (i*0.86)+0.6;                                   // fixed bearing, spread around the sky
-    u.radius = (i===0) ? 700 : (380 + i*42);                 // far off the central DAG axis (sides/up/down)
-    u.dist = (i===0) ? 1300 : (620 + ((i*157)%620));         // far ahead in z, well beyond the stream
-    u.yOff = (i===0) ? 360 : (((i*89)%480) - 230);
-    u.drift = (i===0) ? 0.0000018 : (0.0000034 + (i%4)*0.0000011);
+  // Each world HOLDS a fixed position off to the SIDE of the DAG flow and gently revolves on a SMALL circular
+  // loop in place -- it never flies across the screen. Positions are scattered around the periphery; the DAG
+  // streams straight down the centre. Cloud/atmosphere layers rotate independently so the worlds look alive.
+  const _SPOTS=[
+    [-620, 360,1500],[ 560, 280, 940],[-520,-280, 880],[ 600,-180, 840],[-600, 130,1040],
+    [ 470, 380, 900],[-490,-360,1120],[ 640,  70, 820],[-410, 360,1200],[ 560,-340,1160]
+  ];
+  list.forEach((g,i)=>{ const u=g.userData, sp=_SPOTS[i%_SPOTS.length];
+    u.bx=sp[0]; u.by=sp[1]; u.dist=sp[2];
+    u.loopR=(i===0)?72:(24+i*5); u.loopPh=i*1.4; u.loopSpd=0.00016+(i%5)*0.00004;   // slow in-place revolve
   });
   window._solar=function(cz){ const now=Date.now();
     sunLight.position.set(520, 420, cz+360);                 // fixed key light -> worlds lit toward the viewer
     for(let i=0;i<list.length;i++){ const g=list[i], u=g.userData;
-      const a = u.bear + now*u.drift;
-      g.position.set(Math.cos(a)*u.radius, Math.sin(a)*u.radius*0.5 + u.yOff, cz - u.dist);
+      const a = u.loopPh + now*u.loopSpd;
+      g.position.set(u.bx + Math.cos(a)*u.loopR, u.by + Math.sin(a)*u.loopR, cz - u.dist);
       u.sph.rotation.y += u.spin;
-      if(u.cloud) u.cloud.rotation.y += u.spin*0.55;          // moving atmosphere (drifts slower than surface)
+      if(u.cloud) u.cloud.rotation.y += u.spin*0.55;          // moving atmosphere (drifts slower than the surface)
     }
   };
   // click a planet -> name + educational popover

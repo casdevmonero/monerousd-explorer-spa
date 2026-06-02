@@ -27,7 +27,7 @@
   function showDag(on){
     buildOverlay();
     var o=document.getElementById('ev-dagoverlay'), c=document.getElementById('ev-dagclose'), f=o.firstChild;
-    if(on && !f.src){ f.src=f.getAttribute('data-src'); }   /* lazy-load the 3D scene on first open */
+    if(on){ f.src=f.getAttribute('data-src')+'&_='+Date.now(); }   /* lazy-load the 3D scene on first open */
     o.style.display=on?'block':'none'; c.style.display=on?'block':'none';
     var segs=document.querySelectorAll('.ev-seg button');
     for(var i=0;i<segs.length;i++){ segs[i].classList.toggle('on',(segs[i].getAttribute('data-ev')==='dag')===on); }
