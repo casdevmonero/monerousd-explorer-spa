@@ -99,12 +99,12 @@
 <div id="stats" class="ui">
   <div class="stat"><div class="k">DAG Height</div><div class="v" id="sHeight">0</div></div>
   <div class="stat"><div class="k">Blocks</div><div class="v" id="sBlocks">0</div></div>
-  <div class="stat"><div class="k">Blue / Red</div><div class="v" id="sBR">0 / 0</div></div>
+  <div class="stat"><div class="k">Selected / Red</div><div class="v" id="sBR">0 / 0</div></div>
   <div class="stat tps"><div class="k">Live TPS</div><div class="v" id="sTps">0<small> tx/s</small></div></div>
 </div>
 <div id="legend" class="ui">
-  <div class="leg"><span class="sw blue"></span>Blue (selected)</div>
-  <div class="leg"><span class="sw red"></span>Red (forfeited)</div>
+  <div class="leg"><span class="sw blue"></span>Selected</div>
+  <div class="leg"><span class="sw red"></span>Forfeited</div>
 </div>
 
 <script type="importmap">
@@ -126,7 +126,7 @@ const COL_BLUE = new THREE.Color(0xFF6600), COL_RED = new THREE.Color(0xef4444),
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
-const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x05060e, 0.0125);
+const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x0a0908, 0.0125); scene.background = new THREE.Color(0x070605);
 const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 4000);
 camera.position.set(0,8,118);
 
