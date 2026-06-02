@@ -192,13 +192,28 @@ const shoot = (function(){
   // real-terminator lighting: the Sun lights one hemisphere, the far side falls into shadow (exactly like real life)
   scene.add(new THREE.AmbientLight(0x2a3350, 0.62));
   const sunLight=new THREE.PointLight(0xfff1d6, 2.7, 0, 0.0); scene.add(sunLight);
-  const earth=c=>{ c.fillStyle='#0c2f6b'; c.fillRect(0,0,256,256); for(let i=0;i<24;i++){c.fillStyle=['#1f7a3d','#2f8f4f','#6e6b3a','#8a7a4a','#27713f'][i%5];c.beginPath();c.ellipse(Math.random()*256,Math.random()*256,14+Math.random()*46,10+Math.random()*30,Math.random()*3,0,TWO);c.fill();} c.fillStyle='#eaf2ff';c.fillRect(0,0,256,12);c.fillRect(0,244,256,12); c.globalAlpha=.5;c.fillStyle='#ffffff'; for(let i=0;i<20;i++){c.beginPath();c.ellipse(Math.random()*256,Math.random()*256,16+Math.random()*44,6+Math.random()*12,Math.random()*3,0,TWO);c.fill();} c.globalAlpha=1; };
-  const band=(a,b,spot)=>c=>{ for(let y=0;y<256;y+=2){ const k=Math.sin(y*0.05)+0.32*Math.sin(y*0.15+1); c.fillStyle=k>0?a:b; c.fillRect(0,y,256,2);} if(spot){ c.fillStyle=spot; c.beginPath();c.ellipse(160,118,26,15,0,0,TWO);c.fill(); } };
-  const rock=(col,cr)=>c=>{ c.fillStyle=col; c.fillRect(0,0,256,256); for(let i=0;i<120;i++){c.fillStyle=cr||'rgba(0,0,0,.18)';c.globalAlpha=.16+Math.random()*.34;c.beginPath();c.arc(Math.random()*256,Math.random()*256,2+Math.random()*14,0,TWO);c.fill();} c.globalAlpha=1; };
+  // real-colour surfaces; clouds/bands live on a SEPARATE, independently-rotating layer (moving atmospheres)
+  const earth=c=>{ c.fillStyle='#0a3a78'; c.fillRect(0,0,256,256); const cc=['#2e6b3a','#356f3e','#6f5e38','#8a7340','#b8a05a'];
+    for(let i=0;i<28;i++){c.fillStyle=cc[i%5];c.globalAlpha=.94;c.beginPath();c.ellipse(Math.random()*256,Math.random()*256,12+Math.random()*44,9+Math.random()*28,Math.random()*3,0,TWO);c.fill();}
+    c.globalAlpha=1; c.fillStyle='#eef4ff'; c.fillRect(0,0,256,11); c.fillRect(0,245,256,11); };
+  const cloudsT=c=>{ c.clearRect(0,0,256,256); c.fillStyle='#ffffff'; for(let i=0;i<28;i++){c.globalAlpha=.30+Math.random()*.45;c.beginPath();c.ellipse(Math.random()*256,Math.random()*256,16+Math.random()*42,5+Math.random()*11,Math.random()*3,0,TWO);c.fill();} c.globalAlpha=1; };
+  const venusT=c=>{ for(let y=0;y<256;y+=2){ c.fillStyle=Math.sin(y*0.06)>-0.2?'#e0cf9c':'#cdb886'; c.fillRect(0,y,256,2);} };
+  const venusCl=c=>{ c.clearRect(0,0,256,256); c.fillStyle='#f3e8c4'; for(let i=0;i<16;i++){c.globalAlpha=.42;c.beginPath();c.ellipse(Math.random()*256,Math.random()*256,30+Math.random()*44,9+Math.random()*13,0.3,0,TWO);c.fill();} c.globalAlpha=1; };
+  const band=(a,b,spot)=>c=>{ for(let y=0;y<256;y+=2){ const k=Math.sin(y*0.05)+0.32*Math.sin(y*0.15+1)+0.12*Math.sin(y*0.42); c.fillStyle=k>0?a:b; c.fillRect(0,y,256,2);} if(spot){ c.fillStyle=spot; c.beginPath();c.ellipse(168,120,28,16,0,0,TWO);c.fill(); } };
+  const bandCl=a=>c=>{ c.clearRect(0,0,256,256); for(let y=0;y<256;y+=3){ if(Math.sin(y*0.085+0.6)>0.25){ c.fillStyle=a; c.globalAlpha=.45; c.fillRect(0,y,256,2);} } c.globalAlpha=1; };
+  const smooth=(col,b2)=>c=>{ c.fillStyle=col; c.fillRect(0,0,256,256); c.globalAlpha=.16; c.fillStyle=b2||'#ffffff'; for(let y=46;y<256;y+=58){c.fillRect(0,y,256,4);} c.globalAlpha=1; };
+  const rock=(col,cr)=>c=>{ c.fillStyle=col; c.fillRect(0,0,256,256); for(let i=0;i<130;i++){c.fillStyle=cr||'rgba(0,0,0,.18)';c.globalAlpha=.14+Math.random()*.36;c.beginPath();c.arc(Math.random()*256,Math.random()*256,2+Math.random()*15,0,TWO);c.fill();} c.globalAlpha=1; };
   const defs=[
-    {r:56,sun:1,col:0xffb733}, {r:8,t:rock('#9a8b7a','rgba(45,34,26,.45)')}, {r:18,t:rock('#d9b27a','rgba(150,110,60,.32)'),atmo:0xe8c98a}, {r:22,t:earth,atmo:0x5aa8ff},
-    {r:7,t:rock('#cfcfcf','rgba(40,40,46,.5)')}, {r:13,t:rock('#b6502a','rgba(90,40,24,.42)')}, {r:46,t:band('#d8b487','#a9824f','#b23a2a'),atmo:0xd9b98a},
-    {r:38,t:band('#e6d2a0','#c2a96a'),ring:1,atmo:0xe6d2a0}, {r:27,t:rock('#9fe0e6','rgba(110,180,190,.3)'),atmo:0x9fe0e6}, {r:26,t:rock('#3a5fd0','rgba(40,70,160,.4)'),atmo:0x4f7bff}
+    {r:60,sun:1,col:0xffc844},
+    {r:9,t:rock('#8c857c','rgba(40,34,28,.5)')},
+    {r:17,t:venusT,cloud:venusCl,atmo:0xe6d8a8},
+    {r:20,t:earth,cloud:cloudsT,atmo:0x4ea0ff},
+    {r:7,t:rock('#b6b2ac','rgba(50,48,52,.5)')},
+    {r:13,t:rock('#b5462c','rgba(120,52,30,.45)'),atmo:0xc97a4a},
+    {r:48,t:band('#d9c2a0','#b08a52','#c0392b'),cloud:bandCl('#efe1c4'),atmo:0xe0c79a},
+    {r:40,t:band('#e3d2a0','#c2a96a'),cloud:bandCl('#f1e6c2'),ring:1,atmo:0xe6d2a0},
+    {r:28,t:smooth('#9fe0e6','#c8f0f2')},
+    {r:27,t:smooth('#3b5bdb','#5a7bff')}
   ];
   const INFO=[
     {n:'\u2600 Sun',d:'The star at the centre of our solar system \u2014 99.86% of the system mass. About 150 million km from Earth (1 AU). Fuses hydrogen into helium, lighting every planet you see here.'},
@@ -221,20 +236,30 @@ const shoot = (function(){
     const sm = d.sun ? new THREE.MeshBasicMaterial({color:d.col,fog:false}) : new THREE.MeshLambertMaterial({map:mkTex(d.t),fog:false});
     const sph=new THREE.Mesh(new THREE.SphereGeometry(d.r,42,32), sm); sph.userData={info:INFO[i]}; sph.rotation.z=i*0.21; g.add(sph);
     if(d.sun){ const h=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:0xffb733,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0.95,fog:false})); h.scale.setScalar(d.r*6); g.add(h); }
-    if(d.atmo){ g.add(new THREE.Mesh(new THREE.SphereGeometry(d.r*1.14,30,22), new THREE.MeshBasicMaterial({color:d.atmo,transparent:true,opacity:0.18,side:THREE.BackSide,blending:THREE.AdditiveBlending,fog:false}))); }
+    if(d.atmo){ g.add(new THREE.Mesh(new THREE.SphereGeometry(d.r*1.14,30,22), new THREE.MeshBasicMaterial({color:d.atmo,transparent:true,opacity:0.16,side:THREE.BackSide,blending:THREE.AdditiveBlending,fog:false}))); }
+    let cloudMesh=null;
+    if(d.cloud){ cloudMesh=new THREE.Mesh(new THREE.SphereGeometry(d.r*1.03,40,30), new THREE.MeshLambertMaterial({map:mkTex(d.cloud),transparent:true,depthWrite:false,fog:false})); g.add(cloudMesh); }
     if(d.ring){ const rg=new THREE.Mesh(new THREE.RingGeometry(d.r*1.45,d.r*2.35,72), new THREE.MeshBasicMaterial({color:0xe6d2a0,side:THREE.DoubleSide,transparent:true,opacity:0.6,fog:false})); rg.rotation.x=1.18; rg.rotation.y=0.2; g.add(rg); }
-    g.userData={spin:0.002+Math.random()*0.005, R:ORB[i], P:PER[i], ph:i*2.1, sph:sph}; scene.add(g); list.push(g);
+    g.userData={spin:0.0016+Math.random()*0.004, sph:sph, cloud:cloudMesh}; scene.add(g); list.push(g);
   });
-  // CALM sequential fly-through: one world drifts toward you at a time on a gentle circular path, recycling BEHIND
-  // the camera so nothing ever pops or vanishes. Phase is wall-clock (Date.now) so which body you meet depends on
-  // the time you open the view -- identical for everyone and resumes after a restart.
-  const _SPAN=list.length*1700, _CYC=300000;   // ~5 min for a full lap of the system (~30s per body)
-  window._solar=function(cz){ const now=Date.now(), flow=((now/_CYC)%1)*_SPAN;
-    sunLight.position.set(300, 340, cz+260);   // fixed key light -> the lit hemisphere always faces the viewer
+  // DISTANT BACKDROP: the sun + planets sit far out in the periphery, scattered at fixed bearings WELL OFF the
+  // central flight axis and far behind in z, so the DAG streams down the centre and NEVER passes through them.
+  // They drift very slowly + spin; their cloud/atmosphere layers rotate independently so the worlds look alive.
+  list.forEach((g,i)=>{ const u=g.userData;
+    u.bear = (i*0.86)+0.6;                                   // fixed bearing, spread around the sky
+    u.radius = (i===0) ? 700 : (380 + i*42);                 // far off the central DAG axis (sides/up/down)
+    u.dist = (i===0) ? 1300 : (620 + ((i*157)%620));         // far ahead in z, well beyond the stream
+    u.yOff = (i===0) ? 360 : (((i*89)%480) - 230);
+    u.drift = (i===0) ? 0.0000018 : (0.0000034 + (i%4)*0.0000011);
+  });
+  window._solar=function(cz){ const now=Date.now();
+    sunLight.position.set(520, 420, cz+360);                 // fixed key light -> worlds lit toward the viewer
     for(let i=0;i<list.length;i++){ const g=list[i], u=g.userData;
-      const d=(((i*1700 - flow)%_SPAN)+_SPAN)%_SPAN, sway=now/9000 + i*1.7;
-      g.position.set(Math.cos(sway)*130 + (i%2?95:-95), Math.sin(sway)*72 - 18, cz + 280 - d);
-      u.sph.rotation.y += u.spin; }
+      const a = u.bear + now*u.drift;
+      g.position.set(Math.cos(a)*u.radius, Math.sin(a)*u.radius*0.5 + u.yOff, cz - u.dist);
+      u.sph.rotation.y += u.spin;
+      if(u.cloud) u.cloud.rotation.y += u.spin*0.55;          // moving atmosphere (drifts slower than surface)
+    }
   };
   // click a planet -> name + educational popover
   const _pray=new THREE.Raycaster(), _pm=new THREE.Vector2();
