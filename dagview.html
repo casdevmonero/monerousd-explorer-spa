@@ -215,11 +215,11 @@ async function tick(){
     if(r.ok){ liveOk=true; } }catch(e){} }
   spawn(isBlue);
 }
+// ---- block-list view (blocksEl MUST be initialized before the seed loop first calls prependRow) ----
+const blocksEl=document.getElementById('blocks');
 setInterval(tick, 1100);                                 // ~1 block/1.1s (5s blocks, time-compressed x4.5)
 for(let i=0;i<26;i++) spawn(Math.random()>0.18);         // seed an initial DAG
 
-// ---- block-list view ----
-const blocksEl=document.getElementById('blocks');
 function prependRow(blk, txs){
   const row=document.createElement('div'); row.className='row';
   row.innerHTML=`<div class="h">#${blk.h}</div>
