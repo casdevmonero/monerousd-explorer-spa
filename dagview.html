@@ -278,20 +278,41 @@ function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime
   composer.render(); }
 animate();
 
-// ---- clickable blocks: pick a circle -> tx-data popover (live-ready) ----
+// ---- interactive batch explorer: click to focus+pause, search, scrub history, jump to latest ----
 (function(){
   const ray=new THREE.Raycaster(), m2=new THREE.Vector2();
   const pop=document.createElement('div'); pop.id='blkpop';
-  pop.style.cssText='position:fixed;z-index:30;display:none;min-width:238px;max-width:300px;padding:13px 15px;background:rgba(17,17,17,.95);border:1px solid var(--cyan,#FF6600);border-radius:12px;backdrop-filter:blur(12px);box-shadow:0 14px 50px rgba(0,0,0,.6);font:500 12px Inter,system-ui,sans-serif;color:#f0eeea;pointer-events:auto';
+  pop.style.cssText='position:fixed;z-index:30;display:none;min-width:250px;max-width:320px;padding:15px 16px;background:rgba(17,17,17,.96);border:1px solid var(--cyan,#FF6600);border-radius:13px;backdrop-filter:blur(13px);box-shadow:0 16px 54px rgba(0,0,0,.62);font:500 12px Inter,system-ui,sans-serif;color:#f0eeea;pointer-events:auto';
   document.body.appendChild(pop);
-  function show(b,x,y){ const isB=b.isBlue;
-    pop.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px"><span style="font:700 13px JetBrains Mono,monospace;color:#FF6600">Block #'+b.h+'</span><span style="font:700 9px Inter;letter-spacing:.5px;padding:3px 9px;border-radius:999px;'+(isB?'color:#FF6600;background:rgba(255,102,0,.13);border:1px solid rgba(255,102,0,.32)':'color:#ef4444;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3)')+'">'+(isB?'BLUE · selected':'RED ⊘ forfeited')+'</span></div><div style="font:500 10.5px JetBrains Mono,monospace;color:#b5b2ab;word-break:break-all;margin-bottom:8px">'+b.hash+'</div><div style="display:flex;gap:18px;color:#9a958c;font-size:11px"><span>↳ '+b.parents.length+' parent'+(b.parents.length!==1?'s':'')+'</span><span style="color:#FF8533;font-weight:600">'+(b.txs?b.txs.toLocaleString():'—')+' tx settled</span></div><div style="margin-top:9px;font-size:9.5px;color:#6f6c66;letter-spacing:.3px">L2 aggregate settlement · click empty space to close</div>';
-    pop.style.left=Math.min(x+15,innerWidth-312)+'px'; pop.style.top=Math.min(y+15,innerHeight-156)+'px'; pop.style.display='block'; }
-  function pick(e){ if(e.target&&e.target.closest&&e.target.closest('.ui,#toggle,#top,#blkpop')) return;
+  const bar=document.createElement('div');
+  bar.style.cssText='position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:14;display:flex;gap:8px;align-items:center;background:rgba(20,20,20,.72);border:1px solid rgba(255,102,0,.22);border-radius:999px;padding:5px 6px 5px 15px;backdrop-filter:blur(12px);box-shadow:0 8px 30px rgba(0,0,0,.45)';
+  bar.innerHTML='<span style="font:600 10.5px Inter;color:#6f6c66;letter-spacing:.4px;text-transform:uppercase">Batch</span><input id="bsearch" type="number" min="1" placeholder="search #" style="width:92px;background:transparent;border:0;outline:none;color:#f0eeea;font:600 12px JetBrains Mono,monospace"><button id="blatest" style="cursor:pointer;border:0;background:var(--cyan,#FF6600);color:#0a0a0a;font:700 11px Inter;letter-spacing:.2px;padding:7px 13px;border-radius:999px">Latest ▸</button>';
+  document.body.appendChild(bar);
+  const sb=document.createElement('div');
+  sb.style.cssText='position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:14;width:min(440px,42vw);display:flex;align-items:center;gap:11px;background:rgba(20,20,20,.6);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:8px 15px;backdrop-filter:blur(10px)';
+  sb.innerHTML='<span style="font:600 9px Inter;color:#6f6c66;letter-spacing:.6px;white-space:nowrap">◂ PAST</span><input id="bscrub" type="range" min="0" max="100" value="100" style="flex:1;accent-color:#FF6600;cursor:pointer;height:3px"><span style="font:600 9px Inter;color:#6f6c66;letter-spacing:.6px;white-space:nowrap">LIVE ▸</span>';
+  document.body.appendChild(sb);
+  const sIn=document.getElementById('bsearch'), latBtn=document.getElementById('blatest'), scr=document.getElementById('bscrub');
+  const fmt=n=>n?n.toLocaleString():'—';
+  function showPop(b){ const isB=b.isBlue;
+    pop.innerHTML='<button id="bpx" title="resume flow" style="position:absolute;top:9px;right:11px;cursor:pointer;border:0;background:transparent;color:#9a958c;font:700 14px Inter;line-height:1">✕</button><div style="font:700 14px JetBrains Mono,monospace;color:#FF6600;margin-bottom:5px">Batch #'+b.h+'</div><div style="margin-bottom:9px"><span style="font:700 9px Inter;letter-spacing:.5px;padding:3px 9px;border-radius:999px;'+(isB?'color:#FF6600;background:rgba(255,102,0,.13);border:1px solid rgba(255,102,0,.32)':'color:#ef4444;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3)')+'">'+(isB?'BLUE · selected':'RED ⊘ forfeited')+'</span></div><div style="font:500 10.5px JetBrains Mono,monospace;color:#b5b2ab;word-break:break-all;margin-bottom:9px">'+b.hash+'</div><div style="display:flex;gap:18px;color:#9a958c;font-size:11px"><span>↳ '+b.parents.length+' parent'+(b.parents.length!==1?'s':'')+'</span><span style="color:#FF8533;font-weight:600">'+fmt(b.txs)+' tx settled</span></div><div style="margin-top:10px;font-size:9.5px;color:#6f6c66;line-height:1.45">Paused on this batch · the DAG keeps forming behind · amounts stay private</div>';
+    pop.style.left=Math.max(14,innerWidth*0.5-160)+'px'; pop.style.top='116px'; pop.style.display='block';
+    document.getElementById('bpx').onclick=resume; }
+  function focusOn(b){ if(!b)return; focusBlk=b; viewMode='focus'; showPop(b); }
+  function resume(){ viewMode='live'; focusBlk=null; pop.style.display='none'; scr.value=100; }
+  function pick(e){ if(bar.contains(e.target)||sb.contains(e.target)||pop.contains(e.target)) return;
+    if(e.target&&e.target.closest&&e.target.closest('.ui,#toggle,#top')) return;
     m2.x=(e.clientX/innerWidth)*2-1; m2.y=-(e.clientY/innerHeight)*2+1; ray.setFromCamera(m2,camera);
     const hit=ray.intersectObjects(blocks.map(b=>b.mesh).filter(Boolean),true)[0];
-    if(hit){ const o=hit.object, b=blocks.find(x=>x.mesh===o||x.mesh===o.parent); if(b){ show(b,e.clientX,e.clientY); return; } }
-    pop.style.display='none'; }
+    if(hit){ const o=hit.object, b=blocks.find(x=>x.mesh===o||x.mesh===o.parent); if(b) focusOn(b); } }
+  sIn.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const b=blocksByNum.get(parseInt(sIn.value,10));
+    if(b){ focusOn(b); sIn.blur(); } else { sIn.style.color='#ef4444'; setTimeout(function(){sIn.style.color='#f0eeea';},700); } } });
+  latBtn.addEventListener('click',resume);
+  scr.addEventListener('input',function(){ if(!blocks.length)return; if(+scr.value>=99){ resume(); return; }
+    const lo=blocks[0].h, hi=blocks[blocks.length-1].h, target=Math.round(lo+(hi-lo)*(+scr.value)/100);
+    let best=blocks[0],bd=1e9; for(const b of blocks){ const d=Math.abs(b.h-target); if(d<bd){bd=d;best=b;} }
+    viewMode='scrub'; scrubZ=best.mesh.position.z+6; focusBlk=null; pop.style.display='none'; });
+  setInterval(function(){ if(viewMode==='live') scr.value=100; },800);
   try{ renderer.domElement.style.cursor='crosshair'; }catch(e){}
   addEventListener('click',pick);
 })();
