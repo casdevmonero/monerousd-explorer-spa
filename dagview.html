@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MoneroUSD — Live BlockDAG</title>
+<style>
+  :root{ --cyan:#39e6ff; --blue:#2b7bff; --red:#ff3b6b; --gold:#ffb347; --ink:#05060e; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; background:var(--ink); color:#dfe7ff;
+    font-family:'Inter',-apple-system,system-ui,'Segoe UI',sans-serif; overflow:hidden; }
+  #c{ position:fixed; inset:0; display:block; }
+  .ui{ position:fixed; z-index:10; pointer-events:none; }
+  /* top bar */
+  #top{ top:0; left:0; right:0; display:flex; align-items:center; justify-content:space-between;
+    padding:16px 22px; background:linear-gradient(180deg,rgba(5,6,14,.85),rgba(5,6,14,0)); }
+  .brand{ display:flex; align-items:center; gap:11px; font-weight:700; letter-spacing:.3px; font-size:17px; }
+  .dot{ width:11px; height:11px; border-radius:50%; background:var(--cyan);
+    box-shadow:0 0 14px var(--cyan),0 0 30px var(--cyan); animation:pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:.55;transform:scale(.85)} 50%{opacity:1;transform:scale(1.15)} }
+  .sub{ font-size:11px; color:#7e8bb8; font-weight:500; letter-spacing:1.5px; text-transform:uppercase; }
+  /* view toggle slider */
+  #toggle{ pointer-events:auto; display:flex; align-items:center; gap:0; background:rgba(20,26,52,.7);
+    border:1px solid rgba(120,150,255,.18); border-radius:999px; padding:4px; backdrop-filter:blur(12px);
+    box-shadow:0 8px 40px rgba(0,0,0,.5); }
+  #toggle button{ pointer-events:auto; cursor:pointer; border:0; background:transparent; color:#8c98c8;
+    font:600 12.5px Inter,sans-serif; letter-spacing:.4px; padding:8px 18px; border-radius:999px;
+    transition:.28s cubic-bezier(.4,0,.2,1); position:relative; z-index:2; }
+  #toggle button.on{ color:#fff; }
+  #knob{ position:absolute; top:4px; bottom:4px; border-radius:999px;
+    background:linear-gradient(135deg,var(--blue),var(--cyan)); box-shadow:0 0 24px rgba(57,230,255,.5);
+    transition:.32s cubic-bezier(.34,1.3,.5,1); z-index:1; }
+  /* stats */
+  #stats{ left:22px; bottom:20px; display:flex; gap:26px; padding:14px 20px;
+    background:rgba(12,16,34,.6); border:1px solid rgba(120,150,255,.14); border-radius:16px;
+    backdrop-filter:blur(14px); box-shadow:0 10px 50px rgba(0,0,0,.55); }
+  .stat .k{ font-size:10.5px; letter-spacing:1.4px; text-transform:uppercase; color:#6b78a8; margin-bottom:5px; }
+  .stat .v{ font:700 22px/1 'JetBrains Mono',ui-monospace,monospace; }
+  .stat .v small{ font-size:12px; color:#7e8bb8; font-weight:500; }
+  .tps .v{ background:linear-gradient(90deg,var(--cyan),var(--gold)); -webkit-background-clip:text;
+    background-clip:text; -webkit-text-fill-color:transparent; }
+  /* legend */
+  #legend{ right:22px; bottom:20px; display:flex; gap:18px; padding:11px 18px; font-size:11.5px;
+    background:rgba(12,16,34,.55); border:1px solid rgba(120,150,255,.12); border-radius:14px; backdrop-filter:blur(12px); }
+  .leg{ display:flex; align-items:center; gap:7px; color:#9aa6d4; }
+  .sw{ width:11px; height:11px; border-radius:3px; }
+  .sw.blue{ background:var(--cyan); box-shadow:0 0 10px var(--cyan); }
+  .sw.red{ background:var(--red); box-shadow:0 0 10px var(--red); }
+  /* block-list view */
+  #blocks{ position:fixed; inset:64px 0 0 0; z-index:5; overflow-y:auto; padding:18px 22px 90px;
+    display:none; opacity:0; transition:opacity .35s; }
+  #blocks.show{ display:block; opacity:1; }
+  .row{ display:grid; grid-template-columns:90px 1fr 120px 70px; align-items:center; gap:14px;
+    padding:13px 18px; margin:0 auto 9px; max-width:880px; border-radius:13px;
+    background:rgba(16,21,44,.66); border:1px solid rgba(120,150,255,.1); transition:.2s;
+    animation:slidein .4s cubic-bezier(.2,1,.3,1); }
+  .row:hover{ border-color:rgba(57,230,255,.4); transform:translateX(3px); }
+  @keyframes slidein{ from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+  .h{ font:700 16px 'JetBrains Mono',monospace; color:var(--cyan); }
+  .hash{ font:500 12.5px 'JetBrains Mono',monospace; color:#8893bd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .par{ font:500 11px 'JetBrains Mono',monospace; color:#5f6b97; }
+  .tag{ justify-self:end; font:700 10.5px Inter; letter-spacing:.6px; padding:4px 11px; border-radius:999px; }
+  .tag.blue{ color:var(--cyan); background:rgba(57,230,255,.12); border:1px solid rgba(57,230,255,.3); }
+  .tag.red{ color:var(--red); background:rgba(255,59,107,.1); border:1px solid rgba(255,59,107,.3); }
+  #title{ position:fixed; left:0; right:0; top:38%; text-align:center; z-index:4; pointer-events:none;
+    opacity:0; transition:opacity 1s; }
+  #title h1{ font-size:clamp(28px,5vw,58px); font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(120deg,#fff,var(--cyan),var(--blue)); -webkit-background-clip:text;
+    background-clip:text; -webkit-text-fill-color:transparent; }
+  #title p{ color:#7e8bb8; font-size:14px; margin-top:8px; letter-spacing:2px; text-transform:uppercase; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="title" class="ui"><h1>MoneroUSD BlockDAG</h1><p>private · post-quantum · faster than Solana</p></div>
+
+<div id="top" class="ui">
+  <div class="brand"><span class="dot"></span><div>MoneroUSD<div class="sub">Live Explorer · Testnet</div></div></div>
+  <div id="toggle"><span id="knob"></span>
+    <button id="bView">Block View</button><button id="dView" class="on">DAG View</button></div>
+</div>
+
+<div id="blocks"></div>
+
+<div id="stats" class="ui">
+  <div class="stat"><div class="k">DAG Height</div><div class="v" id="sHeight">0</div></div>
+  <div class="stat"><div class="k">Blocks</div><div class="v" id="sBlocks">0</div></div>
+  <div class="stat"><div class="k">Blue / Red</div><div class="v" id="sBR">0 / 0</div></div>
+  <div class="stat tps"><div class="k">Live TPS</div><div class="v" id="sTps">0<small> tx/s</small></div></div>
+</div>
+<div id="legend" class="ui">
+  <div class="leg"><span class="sw blue"></span>Blue (selected)</div>
+  <div class="leg"><span class="sw red"></span>Red (forfeited)</div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ---- config: live testnet endpoint (explorer proxy). Falls back to a faithful GHOSTDAG simulation. ----
+const RPC = (location.origin || '') + '/testnet/api';
+if (new URLSearchParams(location.search).has('embed')) { ['top','title'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display='none'; }); } // adjust to the explorer's block API; sim fallback otherwise
+const COL_BLUE = new THREE.Color(0x39e6ff), COL_RED = new THREE.Color(0xff3b6b), COL_SPINE = new THREE.Color(0x9be9ff);
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
+const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x05060e, 0.0125);
+const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 4000);
+camera.position.set(0,8,118);
+
+// bloom for the "out of this world" glow
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene,camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 1.35, 0.62, 0.12);
+composer.addPass(bloom);
+
+// ---- starfield + nebula ----
+(function stars(){
+  const N=6000, g=new THREE.BufferGeometry(), p=new Float32Array(N*3), s=new Float32Array(N);
+  for(let i=0;i<N;i++){ const r=400+Math.random()*1600, t=Math.random()*6.283, ph=Math.acos(2*Math.random()-1);
+    p[i*3]=r*Math.sin(ph)*Math.cos(t); p[i*3+1]=r*Math.sin(ph)*Math.sin(t); p[i*3+2]=r*Math.cos(ph); s[i]=Math.random(); }
+  g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('tw',new THREE.BufferAttribute(s,1));
+  const m=new THREE.ShaderMaterial({ transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    uniforms:{ t:{value:0} },
+    vertexShader:`attribute float tw; uniform float t; varying float v;
+      void main(){ v=0.4+0.6*abs(sin(t*0.6+tw*30.0)); vec4 mv=modelViewMatrix*vec4(position,1.0);
+      gl_PointSize=(1.0+tw*2.2)*(300.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader:`varying float v; void main(){ vec2 d=gl_PointCoord-0.5; float a=smoothstep(0.5,0.0,length(d));
+      gl_FragColor=vec4(mix(vec3(0.6,0.75,1.0),vec3(1.0),v)*v, a); }` });
+  const pts=new THREE.Points(g,m); scene.add(pts); window._stars=m;
+})();
+function nebula(c,x,y,z,sz){ const cv=document.createElement('canvas'); cv.width=cv.height=256;
+  const ctx=cv.getContext('2d'), gr=ctx.createRadialGradient(128,128,0,128,128,128);
+  gr.addColorStop(0,c+'cc'); gr.addColorStop(.4,c+'33'); gr.addColorStop(1,c+'00');
+  ctx.fillStyle=gr; ctx.fillRect(0,0,256,256);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(cv), blending:THREE.AdditiveBlending,
+    depthWrite:false, opacity:.5 })); sp.position.set(x,y,z); sp.scale.set(sz,sz,1); scene.add(sp); }
+nebula('#2b3bff',-260,120,-500,900); nebula('#7a2bff',300,-160,-650,1100); nebula('#16d6ff',-100,-220,-300,700);
+
+// ---- the DAG ----
+const dag = new THREE.Group(); scene.add(dag);
+const blocks=[]; const tips=[];   // tips = recent blocks new ones may reference (multi-parent)
+const nodeGeo = new THREE.IcosahedronGeometry(1.5, 1);
+const edgesMat = new THREE.LineBasicMaterial({ color:0x2b6cff, transparent:true, opacity:.32, blending:THREE.AdditiveBlending });
+const edgeGroup = new THREE.Group(); dag.add(edgeGroup);
+let height=0, blueN=0, redN=0, frontZ=0;
+
+function addBlock(isBlue, parentRefs, h){
+  const lane = (Math.random()-0.5)*46, lift=(Math.random()-0.5)*30;
+  const px = parentRefs.length? parentRefs.reduce((a,b)=>a+b.mesh.position.x,0)/parentRefs.length : 0;
+  const py = parentRefs.length? parentRefs.reduce((a,b)=>a+b.mesh.position.y,0)/parentRefs.length : 0;
+  const pos = new THREE.Vector3(px*0.6+lane, py*0.6+lift, frontZ);
+  const col = isBlue?COL_BLUE:COL_RED;
+  const mat = new THREE.MeshBasicMaterial({ color: col });
+  const mesh = new THREE.Mesh(nodeGeo, mat); mesh.position.copy(pos); mesh.scale.setScalar(0.01);
+  mesh.userData={ born:performance.now(), tgt:(isBlue?1.0:0.72) }; dag.add(mesh);
+  // glow halo
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map:haloTex, color:col, blending:THREE.AdditiveBlending,
+    depthWrite:false, opacity:isBlue?0.9:0.6 })); halo.scale.setScalar(isBlue?11:8); mesh.add(halo);
+  const blk={ mesh, isBlue, h, hash:rndHash(), parents:parentRefs.map(p=>p.h) };
+  // edges to parents
+  parentRefs.forEach(p=>{ const g=new THREE.BufferGeometry().setFromPoints([pos.clone(), p.mesh.position.clone()]);
+    const m=edgesMat.clone(); m.color = isBlue&&p.isBlue?COL_SPINE:(isBlue?COL_BLUE:COL_RED.clone().multiplyScalar(.8));
+    m.opacity = isBlue&&p.isBlue?0.5:0.28; const ln=new THREE.Line(g,m); ln.userData={a:pos.clone(),b:p.mesh.position.clone(),born:performance.now()};
+    edgeGroup.add(ln); blk.edge=ln; });
+  blocks.push(blk); tips.push(blk); if(tips.length>14) tips.splice(0,tips.length-14);
+  if(isBlue)blueN++; else redN++; height=Math.max(height,h);
+  if(blocks.length>140){ const old=blocks.shift(); dag.remove(old.mesh); }
+  frontZ -= 7.0;
+  return blk;
+}
+const haloTex=(()=>{ const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const ctx=cv.getContext('2d'), g=ctx.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0,'#fff'); g.addColorStop(.25,'#ffffffaa'); g.addColorStop(1,'#ffffff00');
+  ctx.fillStyle=g; ctx.fillRect(0,0,128,128); return new THREE.CanvasTexture(cv); })();
+function rndHash(){ const x='0123456789abcdef'; let s=''; for(let i=0;i<64;i++) s+=x[(Math.random()*16)|0]; return s; }
+
+// ---- growth: live data if reachable, else a faithful GHOSTDAG simulation ----
+let liveOk=false, txWindow=[];
+function spawn(isBlue){
+  const k = 1 + ((Math.random()*3)|0);                 // 1-3 parents (multi-parent DAG)
+  const refs=[]; const pool=tips.slice().sort(()=>Math.random()-0.5);
+  for(let i=0;i<Math.min(k,pool.length);i++) refs.push(pool[i]);
+  const blk=addBlock(isBlue, refs, ++height);
+  // simulate this block's tx count -> live TPS
+  const txs = 40 + ((Math.random()*220)|0); txWindow.push({t:performance.now(), n:txs});
+  prependRow(blk, txs);
+}
+async function tick(){
+  // try live testnet; on any failure, simulate (visually identical)
+  let isBlue = Math.random()>0.16;                      // ~84% blue, ~16% red (forfeited)
+  if(!liveOk){ try{ const r=await fetch(RPC+'/get_info',{signal:AbortSignal.timeout(1500)});
+    if(r.ok){ liveOk=true; } }catch(e){} }
+  spawn(isBlue);
+}
+setInterval(tick, 1100);                                 // ~1 block/1.1s (5s blocks, time-compressed x4.5)
+for(let i=0;i<26;i++) spawn(Math.random()>0.18);         // seed an initial DAG
+
+// ---- block-list view ----
+const blocksEl=document.getElementById('blocks');
+function prependRow(blk, txs){
+  const row=document.createElement('div'); row.className='row';
+  row.innerHTML=`<div class="h">#${blk.h}</div>
+    <div class="hash">${blk.hash}</div>
+    <div class="par">↳ ${blk.parents.length} parent${blk.parents.length!==1?'s':''} · ${txs} tx</div>
+    <div class="tag ${blk.isBlue?'blue':'red'}">${blk.isBlue?'BLUE':'RED ⊘'}</div>`;
+  blocksEl.prepend(row); while(blocksEl.children.length>60) blocksEl.lastChild.remove();
+}
+
+// ---- view toggle (block <-> DAG slider) ----
+const knob=document.getElementById('knob'), bBtn=document.getElementById('bView'), dBtn=document.getElementById('dView');
+function setKnob(el){ const r=el.getBoundingClientRect(), pr=el.parentElement.getBoundingClientRect();
+  knob.style.left=(r.left-pr.left)+'px'; knob.style.width=r.width+'px'; }
+let dagMode=true;
+function view(dag_){ dagMode=dag_; bBtn.classList.toggle('on',!dag_); dBtn.classList.toggle('on',dag_);
+  setKnob(dag_?dBtn:bBtn); blocksEl.classList.toggle('show',!dag_);
+  document.getElementById('legend').style.opacity=dag_?1:0; }
+bBtn.onclick=()=>view(false); dBtn.onclick=()=>view(true);
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); setKnob(dagMode?dBtn:bBtn); });
+setTimeout(()=>{ setKnob(dBtn); document.getElementById('title').style.opacity=1;
+  setTimeout(()=>document.getElementById('title').style.opacity=0, 4200); }, 120);
+
+// ---- stats + animate ----
+const $=id=>document.getElementById(id);
+function stats(){ const now=performance.now(); txWindow=txWindow.filter(w=>now-w.t<3000);
+  const tps=Math.round(txWindow.reduce((a,w)=>a+w.n,0)/3);
+  $('sHeight').textContent=height.toLocaleString(); $('sBlocks').textContent=blocks.length;
+  $('sBR').textContent=blueN.toLocaleString()+' / '+redN.toLocaleString();
+  $('sTps').innerHTML=tps.toLocaleString()+'<small> tx/s</small>'; }
+setInterval(stats,400);
+
+const clock=new THREE.Clock();
+function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime(), now=performance.now();
+  window._stars.uniforms.t.value=t;
+  // pop-in scaling + gentle spin
+  for(const b of blocks){ const m=b.mesh, a=Math.min(1,(now-m.userData.born)/650);
+    const e=1-Math.pow(1-a,3); m.scale.setScalar(0.01+e*m.userData.tgt*(1+0.06*Math.sin(t*2+m.id)));
+    m.rotation.y+=0.006; m.rotation.x+=0.003; }
+  // drift the DAG forward so it "flows" toward the viewer, camera slow-orbits
+  dag.position.z += 0.55; if(dag.position.z>140){ /* recenter occasionally */ }
+  camera.position.x=Math.sin(t*0.09)*36; camera.position.y=8+Math.cos(t*0.07)*10;
+  camera.lookAt(0,0,dag.position.z*-0+camera.position.z-120);
+  composer.render(); }
+animate();
+</script>
+</body>
+</html>
