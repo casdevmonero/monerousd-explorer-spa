@@ -86,7 +86,7 @@
 <body>
 <canvas id="c"></canvas>
 
-<div id="title" class="ui"><h1>MoneroUSD BlockDAG</h1><p>private · post-quantum · faster than Solana</p></div>
+<div id="title" class="ui"><h1>MoneroUSD BlockDAG</h1><p>private · post-quantum · O(1)-verified</p></div>
 
 <div id="top" class="ui">
   <div class="brand"><span class="dot"></span><div>MoneroUSD<div class="sub">Live Explorer · Testnet</div></div></div>
@@ -242,22 +242,19 @@ const shoot = (function(){
     if(d.ring){ const rg=new THREE.Mesh(new THREE.RingGeometry(d.r*1.45,d.r*2.35,72), new THREE.MeshBasicMaterial({color:0xe6d2a0,side:THREE.DoubleSide,transparent:true,opacity:0.6,fog:false})); rg.rotation.x=1.18; rg.rotation.y=0.2; g.add(rg); }
     g.userData={spin:0.0016+Math.random()*0.004, sph:sph, cloud:cloudMesh}; scene.add(g); list.push(g);
   });
-  // Each world HOLDS a fixed position off to the SIDE of the DAG flow and gently revolves on a SMALL circular
-  // loop in place -- it never flies across the screen. Positions are scattered around the periphery; the DAG
-  // streams straight down the centre. Cloud/atmosphere layers rotate independently so the worlds look alive.
-  const _SPOTS=[
-    [-620, 360,1500],[ 560, 280, 940],[-520,-280, 880],[ 600,-180, 840],[-600, 130,1040],
-    [ 470, 380, 900],[-490,-360,1120],[ 640,  70, 820],[-410, 360,1200],[ 560,-340,1160]
-  ];
-  list.forEach((g,i)=>{ const u=g.userData, sp=_SPOTS[i%_SPOTS.length];
-    u.bx=sp[0]; u.by=sp[1]; u.dist=sp[2];
-    u.loopR=(i===0)?72:(24+i*5); u.loopPh=i*1.4; u.loopSpd=0.00016+(i%5)*0.00004;   // slow in-place revolve
+  // ONE world in frame at a time: the system is a single-file line; as the DAG flows you PASS each planet in
+  // turn, off to the side and in the distance, then it recycles far ahead. Never more than one prominent body,
+  // never crossing the central DAG path. Cloud/atmosphere layers rotate independently so the worlds look alive.
+  const _SPAN=list.length*2000, _GAP=2000, _CYC=240000;
+  list.forEach((g,i)=>{ const u=g.userData, ang=i*1.37;
+    u.sideX=Math.cos(ang)*(300+(i%3)*70);                    // each world passes on its own bearing, off to the side
+    u.sideY=Math.sin(ang)*(210+(i%4)*55)-20;
   });
-  window._solar=function(cz){ const now=Date.now();
+  window._solar=function(cz){ const now=Date.now(), flow=((now/_CYC)%1)*_SPAN;
     sunLight.position.set(520, 420, cz+360);                 // fixed key light -> worlds lit toward the viewer
     for(let i=0;i<list.length;i++){ const g=list[i], u=g.userData;
-      const a = u.loopPh + now*u.loopSpd;
-      g.position.set(u.bx + Math.cos(a)*u.loopR, u.by + Math.sin(a)*u.loopR, cz - u.dist);
+      const d=(((i*_GAP - flow)%_SPAN)+_SPAN)%_SPAN;          // distance ahead; only ONE body sits in the front window
+      g.position.set(u.sideX, u.sideY, cz + 250 - d);         // sweeps past in the distance, off to the side
       u.sph.rotation.y += u.spin;
       if(u.cloud) u.cloud.rotation.y += u.spin*0.55;          // moving atmosphere (drifts slower than the surface)
     }

@@ -26,7 +26,7 @@ function heroTilesHTML(flood) {
     <div class="hero-stat"><div class="hero-stat-label">Block height</div><div class="hero-stat-value">${nf(flood?.blocks)}</div><div class="hero-stat-sub">latest L2 settlement block</div></div>
     <div class="hero-stat"><div class="hero-stat-label">Spends / proof</div><div class="hero-stat-value">${nf(flood?.batchSize)}</div><div class="hero-stat-sub">one O(1)-verified proof</div></div>
     <div class="hero-stat"><div class="hero-stat-label">Verify / proof</div><div class="hero-stat-value">${flood?.verifyMs != null ? Number(flood.verifyMs).toFixed(0) + ' ms' : '—'}</div><div class="hero-stat-sub">flat O(1) · ${bits}-bit PQ</div></div>
-    <div class="hero-stat"><div class="hero-stat-label">Proof / batch</div><div class="hero-stat-value">${proofMB(flood)}</div><div class="hero-stat-sub">post-quantum STARK</div></div>`;
+    <div class="hero-stat"><div class="hero-stat-label">Full-chain sync</div><div class="hero-stat-value">&asymp; 2 MB</div><div class="hero-stat-sub">one recursive proof &middot; any device</div></div>`;
 }
 
 function heroHTML(flood) {
@@ -127,8 +127,10 @@ export async function renderHome(ctx) {
       <div style="padding:4px 2px;color:var(--text-muted,#9a958c);font-size:13.5px;line-height:1.6">
         Each block above is an <strong>L2 settlement batch</strong>: thousands of confidential FCMP++ spends folded
         into a single recursive proof, verified in <strong>flat O(1) time</strong> at production post-quantum
-        security. Effective private throughput = spends ÷ verify time. Proofs are ~2 MB because they're
-        <strong>hash-based STARKs</strong> (quantum-secure) rather than tiny pre-quantum SNARKs.
+        security. Effective private throughput = spends ÷ verify time. Recursion folds the <strong>entire chain
+        into one constant-size proof</strong>, so a node verifies all history from <strong>~2 MB</strong> — run it
+        from any device, no matter how long the chain gets. Proofs are ~2 MB (not Mina's few KB) because they're
+        <strong>hash-based STARKs</strong> — quantum-secure, rather than pre-quantum SNARKs.
         <a href="#/l2">See the full settlement stream →</a>
       </div>
     </section>`;
