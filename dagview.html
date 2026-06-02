@@ -225,19 +225,16 @@ const shoot = (function(){
     if(d.ring){ const rg=new THREE.Mesh(new THREE.RingGeometry(d.r*1.45,d.r*2.35,72), new THREE.MeshBasicMaterial({color:0xe6d2a0,side:THREE.DoubleSide,transparent:true,opacity:0.6,fog:false})); rg.rotation.x=1.18; rg.rotation.y=0.2; g.add(rg); }
     g.userData={spin:0.002+Math.random()*0.005, R:ORB[i], P:PER[i], ph:i*2.1, sph:sph}; scene.add(g); list.push(g);
   });
-  // PERSISTENT orbital solar system: bodies orbit the Sun forever and never pass-by / disappear; the whole system
-  // rides the DAG flow (stays in the backdrop). Angular positions come from wall-clock Date.now() -> identical for
-  // every viewer worldwide and resumes correctly after a restart.
-  const SUN=new THREE.Vector3();
-  window._solar=function(cz){ const now=Date.now();
-    SUN.set(-140, 64, cz - 780); sunLight.position.copy(SUN);
-    const s0=list[0]; s0.position.copy(SUN); s0.children[0].rotation.y+=0.0014;
-    for(let i=1;i<list.length;i++){ const g=list[i], u=g.userData;
-      let ox=SUN.x, oy=SUN.y, oz=SUN.z;
-      if(i===4){ const e=list[3].position; ox=e.x; oy=e.y; oz=e.z; }     // the Moon orbits Earth
-      const a=now/(u.P*430)+u.ph;
-      g.position.set(ox+Math.cos(a)*u.R, oy+Math.sin(a)*u.R*0.20, oz+Math.sin(a)*u.R*0.60);
-      u.sph.rotation.y+=u.spin; }
+  // CALM sequential fly-through: one world drifts toward you at a time on a gentle circular path, recycling BEHIND
+  // the camera so nothing ever pops or vanishes. Phase is wall-clock (Date.now) so which body you meet depends on
+  // the time you open the view -- identical for everyone and resumes after a restart.
+  const _SPAN=list.length*1700, _CYC=300000;   // ~5 min for a full lap of the system (~30s per body)
+  window._solar=function(cz){ const now=Date.now(), flow=((now/_CYC)%1)*_SPAN;
+    sunLight.position.set(300, 340, cz+260);   // fixed key light -> the lit hemisphere always faces the viewer
+    for(let i=0;i<list.length;i++){ const g=list[i], u=g.userData;
+      const d=(((i*1700 - flow)%_SPAN)+_SPAN)%_SPAN, sway=now/9000 + i*1.7;
+      g.position.set(Math.cos(sway)*130 + (i%2?95:-95), Math.sin(sway)*72 - 18, cz + 280 - d);
+      u.sph.rotation.y += u.spin; }
   };
   // click a planet -> name + educational popover
   const _pray=new THREE.Raycaster(), _pm=new THREE.Vector2();
