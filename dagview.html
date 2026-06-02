@@ -138,17 +138,21 @@ composer.addPass(bloom);
 
 // ---- starfield + nebula ----
 (function stars(){
-  const N=6000, g=new THREE.BufferGeometry(), p=new Float32Array(N*3), s=new Float32Array(N);
-  for(let i=0;i<N;i++){ const r=400+Math.random()*1600, t=Math.random()*6.283, ph=Math.acos(2*Math.random()-1);
-    p[i*3]=r*Math.sin(ph)*Math.cos(t); p[i*3+1]=r*Math.sin(ph)*Math.sin(t); p[i*3+2]=r*Math.cos(ph); s[i]=Math.random(); }
+  const N=8200, g=new THREE.BufferGeometry(), p=new Float32Array(N*3), s=new Float32Array(N), col=new Float32Array(N*3);
+  // warm orange-space palette + a few icy accents so the stars POP and read as colorful, not grey
+  const pal=[[1.0,0.42,0.06],[1.0,0.55,0.14],[1.0,0.72,0.30],[1.0,0.86,0.55],[1.0,0.97,0.82],[1.0,1.0,1.0],[1.0,1.0,1.0],[0.58,0.78,1.0],[0.80,0.90,1.0]];
+  for(let i=0;i<N;i++){ const r=380+Math.random()*1720, t=Math.random()*6.283, ph=Math.acos(2*Math.random()-1);
+    p[i*3]=r*Math.sin(ph)*Math.cos(t); p[i*3+1]=r*Math.sin(ph)*Math.sin(t); p[i*3+2]=r*Math.cos(ph); s[i]=Math.random();
+    const c=pal[(Math.random()*pal.length)|0]; col[i*3]=c[0]; col[i*3+1]=c[1]; col[i*3+2]=c[2]; }
   g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('tw',new THREE.BufferAttribute(s,1));
+  g.setAttribute('scol',new THREE.BufferAttribute(col,3));
   const m=new THREE.ShaderMaterial({ transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
     uniforms:{ t:{value:0} },
-    vertexShader:`attribute float tw; uniform float t; varying float v;
-      void main(){ v=0.4+0.6*abs(sin(t*0.6+tw*30.0)); vec4 mv=modelViewMatrix*vec4(position,1.0);
-      gl_PointSize=(1.0+tw*2.2)*(300.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
-    fragmentShader:`varying float v; void main(){ vec2 d=gl_PointCoord-0.5; float a=smoothstep(0.5,0.0,length(d));
-      gl_FragColor=vec4(mix(vec3(1.0,0.80,0.52),vec3(1.0),v)*v, a); }` });
+    vertexShader:`attribute float tw; attribute vec3 scol; uniform float t; varying float v; varying vec3 vc;
+      void main(){ v=0.28+0.72*pow(abs(sin(t*0.8+tw*42.0)),1.7); vc=scol; vec4 mv=modelViewMatrix*vec4(position,1.0);
+      gl_PointSize=(1.1+tw*2.7)*(320.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader:`varying float v; varying vec3 vc; void main(){ vec2 d=gl_PointCoord-0.5; float a=smoothstep(0.5,0.0,length(d));
+      gl_FragColor=vec4(mix(vc,vec3(1.0),v*0.5)*v*1.28, a*(0.40+0.60*v)); }` });
   const pts=new THREE.Points(g,m); scene.add(pts); window._stars=m;
 })();
 function nebula(c,x,y,z,sz){ const cv=document.createElement('canvas'); cv.width=cv.height=256;
@@ -166,6 +170,8 @@ const nodeGeo = new THREE.IcosahedronGeometry(1.5, 1);
 const edgesMat = new THREE.LineBasicMaterial({ color:0xFF6600, transparent:true, opacity:.32, blending:THREE.AdditiveBlending });
 const edgeGroup = new THREE.Group(); dag.add(edgeGroup);
 let height=0, blueN=0, redN=0, frontZ=0;
+// camera-mode flow state (phase 2 wires focus/scrub/search to these)
+let viewMode='live', focusBlk=null, camZ=70, scrubZ=0; const blocksByNum=new Map();
 
 function addBlock(isBlue, parentRefs, h){
   const lane = (Math.random()-0.5)*46, lift=(Math.random()-0.5)*30;
@@ -187,7 +193,7 @@ function addBlock(isBlue, parentRefs, h){
     edgeGroup.add(ln); blk.edge=ln; });
   blocks.push(blk); tips.push(blk); if(tips.length>14) tips.splice(0,tips.length-14);
   if(isBlue)blueN++; else redN++; height=Math.max(height,h);
-  if(blocks.length>140){ const old=blocks.shift(); dag.remove(old.mesh); }
+  if(blocks.length>500){ const old=blocks.shift(); dag.remove(old.mesh); blocksByNum.delete(old.h); }
   frontZ -= 7.0;
   return blk;
 }
@@ -203,7 +209,7 @@ function spawn(isBlue){
   const k = 1 + ((Math.random()*3)|0);                 // 1-3 parents (multi-parent DAG)
   const refs=[]; const pool=tips.slice().sort(()=>Math.random()-0.5);
   for(let i=0;i<Math.min(k,pool.length);i++) refs.push(pool[i]);
-  const blk=addBlock(isBlue, refs, ++height);
+  const blk=addBlock(isBlue, refs, ++height); blocksByNum.set(blk.h, blk);
   // simulate this block's tx count -> live TPS
   const txs = (25 + ((Math.random()*8)|0)) * 4096; blk.txs = txs;  // L2-batched: ~25-32 aggregate settlements/block x N=4096 spends (flat O(1) verify) -> ~90k+ effective TPS
   txWindow.push({t:performance.now(), n:txs});
@@ -260,10 +266,15 @@ function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime
   for(const b of blocks){ const m=b.mesh, a=Math.min(1,(now-m.userData.born)/650);
     const e=1-Math.pow(1-a,3); m.scale.setScalar(0.01+e*m.userData.tgt*(1+0.06*Math.sin(t*2+m.id)));
     m.rotation.y+=0.006; m.rotation.x+=0.003; }
-  // drift the DAG forward so it "flows" toward the viewer, camera slow-orbits
-  dag.position.z += 0.55; if(dag.position.z>140){ /* recenter occasionally */ }
-  camera.position.x=Math.sin(t*0.09)*36; camera.position.y=8+Math.cos(t*0.07)*10;
-  camera.lookAt(0,0,dag.position.z*-0+camera.position.z-120);
+  // ---- infinite flow: live = ride the growing front, focus = lock a batch, scrub = history ----
+  let targetZ;
+  if(viewMode==='focus' && focusBlk && focusBlk.mesh.parent) targetZ = focusBlk.mesh.position.z + 6;
+  else if(viewMode==='scrub') targetZ = scrubZ;
+  else targetZ = frontZ + 120;                       // live: stay just ahead of the newest batch -> never empties
+  camZ += (targetZ - camZ) * (viewMode==='live'?0.05:0.10);
+  const back = (viewMode==='focus')?54:92, orb = (viewMode==='focus')?9:30;
+  camera.position.x = Math.sin(t*0.09)*orb; camera.position.y = 8 + Math.cos(t*0.07)*9;
+  camera.position.z = camZ + back; camera.lookAt(0, 0, camZ);
   composer.render(); }
 animate();
 
