@@ -190,18 +190,45 @@ const shoot = (function(){
     {r:9,t:rock('#bcbcbc')}, {r:20,t:rock('#b6502a')}, {r:70,t:band('#c9a06a','#9c7b4f')},
     {r:58,t:band('#d9c08a','#bda06a'),ring:1}, {r:38,t:rock('#8fd0d6')}, {r:36,t:rock('#3a5fd0')}
   ];
+  const INFO=[
+    {n:'\u2600 Sun',d:'The star at the centre of our solar system \u2014 99.86% of the system mass. About 150 million km from Earth (1 AU). Fuses hydrogen into helium, lighting every planet you see here.'},
+    {n:'Mercury',d:'1st planet, 0.39 AU from the Sun. The smallest planet and the closest to the Sun. Almost no atmosphere \u2014 scorching days, freezing nights.'},
+    {n:'Venus',d:'2nd planet, 0.72 AU. The hottest world (about 465\u00b0C) from a runaway CO\u2082 greenhouse. Spins backwards relative to the others.'},
+    {n:'\ud83c\udf0d Earth',d:'3rd planet, 1 AU. The only known world with life and liquid surface water \u2014 our home, between Venus and Mars.'},
+    {n:'Moon',d:'The natural satellite of Earth, about 384,000 km away. Drives the ocean tides and always shows us the same face.'},
+    {n:'Mars',d:'4th planet, 1.52 AU. The "Red Planet" \u2014 rusty iron-oxide dust, two tiny moons, and dry ancient riverbeds.'},
+    {n:'Jupiter',d:'5th planet, 5.2 AU. The largest planet: a gas giant with the centuries-old Great Red Spot storm and 95+ moons.'},
+    {n:'Saturn',d:'6th planet, 9.5 AU. Famous for its bright icy ring system. So light it would float in water.'},
+    {n:'Uranus',d:'7th planet, 19.2 AU. An ice giant tipped almost sideways; its pale cyan colour comes from methane.'},
+    {n:'Neptune',d:'8th and farthest planet, 30 AU. A deep-blue ice giant with the fastest winds in the solar system.'}
+  ];
   const list=[]; let zc=-520;
   defs.forEach((d,i)=>{
     const g=new THREE.Group();
-    const sm = d.sun ? new THREE.MeshBasicMaterial({color:d.col}) : new THREE.MeshBasicMaterial({map:mkTex(d.t)});
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(d.r,36,28), sm));
-    if(d.sun){ const h=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:0xffaa22,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0.85})); h.scale.setScalar(d.r*5); g.add(h); }
-    if(d.ring){ const rg=new THREE.Mesh(new THREE.RingGeometry(d.r*1.45,d.r*2.3,56), new THREE.MeshBasicMaterial({color:0xd8c79a,side:THREE.DoubleSide,transparent:true,opacity:0.5})); rg.rotation.x=1.15; rg.rotation.y=0.25; g.add(rg); }
+    const sm = d.sun ? new THREE.MeshBasicMaterial({color:d.col,fog:false}) : new THREE.MeshBasicMaterial({map:mkTex(d.t),fog:false});
+    const sph=new THREE.Mesh(new THREE.SphereGeometry(d.r,36,28), sm); sph.userData={info:INFO[i]}; g.add(sph);
+    if(d.sun){ const h=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:0xffaa22,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0.85,fog:false})); h.scale.setScalar(d.r*5); g.add(h); }
+    if(d.ring){ const rg=new THREE.Mesh(new THREE.RingGeometry(d.r*1.45,d.r*2.3,56), new THREE.MeshBasicMaterial({color:0xd8c79a,side:THREE.DoubleSide,transparent:true,opacity:0.5,fog:false})); rg.rotation.x=1.15; rg.rotation.y=0.25; g.add(rg); }
     const a=(hr/24)*TWO + i*0.85; g.position.set(Math.cos(a)*(560+i*70), Math.sin(a)*(250+i*40)-40, zc);
     g.userData={s:0.0008+Math.random()*0.0022}; scene.add(g); list.push(g); zc-=1100+Math.random()*700;
   });
   const span=list.length*1500;
   window._solar=function(cz){ for(const g of list){ g.rotation.y+=g.userData.s; if(g.position.z>cz+260){ g.position.z-=span; g.position.x=(Math.random()-0.5)*1500; g.position.y=(Math.random()-0.5)*760-40; } } };
+  // click a planet -> name + educational popover
+  const _pray=new THREE.Raycaster(), _pm=new THREE.Vector2();
+  const ppop=document.createElement('div'); ppop.id='planetpop';
+  ppop.style.cssText='position:fixed;z-index:31;display:none;max-width:308px;padding:15px 17px;background:rgba(15,17,24,.96);border:1px solid rgba(120,170,255,.42);border-radius:14px;backdrop-filter:blur(14px);box-shadow:0 18px 56px rgba(0,0,0,.66);font:500 12px Inter,system-ui,sans-serif;color:#f0eeea;pointer-events:auto';
+  document.body.appendChild(ppop);
+  window.addEventListener('click', function(e){
+    if(_dragged) return; if(e.target&&e.target.closest&&e.target.closest('.ui,#toggle,#top,#blkpop,#planetpop,#bsuggest')) return;
+    _pm.x=(e.clientX/innerWidth)*2-1; _pm.y=-(e.clientY/innerHeight)*2+1; _pray.setFromCamera(_pm,camera);
+    const sphs=list.map(g=>g.children[0]).filter(Boolean);
+    const hit=_pray.intersectObjects(sphs,false)[0];
+    if(hit&&hit.object.userData.info){ const f=hit.object.userData.info;
+      ppop.innerHTML='<div style="font:700 16px Inter;color:#9ec1ff;margin-bottom:7px">'+f.n+'</div><div style="font-size:11.5px;line-height:1.55;color:#c7c2ba">'+f.d+'</div><div style="margin-top:10px;font-size:9.5px;color:#6f6c66">click empty space to close</div>';
+      ppop.style.left=Math.min(e.clientX+15,innerWidth-322)+'px'; ppop.style.top=Math.min(e.clientY+15,innerHeight-160)+'px'; ppop.style.display='block'; }
+    else ppop.style.display='none';
+  });
 })();
 
 // ---- the DAG ----
