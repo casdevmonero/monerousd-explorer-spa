@@ -257,7 +257,7 @@ const shoot = (function(){
 const dag = new THREE.Group(); scene.add(dag);
 const blocks=[]; const tips=[];   // tips = recent blocks new ones may reference (multi-parent)
 const nodeGeo = new THREE.IcosahedronGeometry(1.5, 1);
-const edgesMat = new THREE.LineBasicMaterial({ color:0xFF6600, transparent:true, opacity:.32, blending:THREE.AdditiveBlending });
+const edgesMat = new THREE.LineBasicMaterial({ color:0xFF6600, transparent:true, opacity:.32, blending:THREE.AdditiveBlending, fog:false });
 const edgeGroup = new THREE.Group(); dag.add(edgeGroup);
 let height=0, blueN=0, redN=0, frontZ=0;
 // camera-mode flow state (phase 2 wires focus/scrub/search to these)
@@ -269,7 +269,7 @@ function addBlock(isBlue, parentRefs, h){
   const py = parentRefs.length? parentRefs.reduce((a,b)=>a+b.mesh.position.y,0)/parentRefs.length : 0;
   const pos = new THREE.Vector3(px*0.6+lane, py*0.6+lift, frontZ);
   const col = isBlue?COL_BLUE:COL_RED;
-  const mat = new THREE.MeshBasicMaterial({ color: col });
+  const mat = new THREE.MeshBasicMaterial({ color: col, fog:false });
   const mesh = new THREE.Mesh(nodeGeo, mat); mesh.position.copy(pos); mesh.scale.setScalar(0.01);
   mesh.userData={ born:performance.now(), tgt:(isBlue?1.0:0.72) }; dag.add(mesh);
   // glow halo
