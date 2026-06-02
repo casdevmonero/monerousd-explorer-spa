@@ -54,8 +54,8 @@ function batchesHTML(flood) {
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Block</th><th class="num">Private spends</th><th class="num">Verify</th>
-          <th class="num">Eff. TPS</th><th class="num">Proof</th><th>Status</th>
+          <th>Block</th><th class="num">Private spends</th><th class="num col-sm-hide">Verify</th>
+          <th class="num">Eff. TPS</th><th class="num col-sm-hide">Proof</th><th>Status</th>
         </tr></thead>
         <tbody>
           ${s.slice(0, 12).map(b => {
@@ -66,9 +66,9 @@ function batchesHTML(flood) {
             return `<tr class="batch-row" data-b="${data}" style="cursor:pointer">
               <td><span style="color:var(--accent,#FF6600);font-weight:600">#${nf(b.block)}</span></td>
               <td class="num">${nf(sp)}</td>
-              <td class="num">${vm.toFixed(1)} ms</td>
+              <td class="num col-sm-hide">${vm.toFixed(1)} ms</td>
               <td class="num" style="color:var(--accent,#FF6600);font-weight:600">${nf(tps)}</td>
-              <td class="num">${pm}</td>
+              <td class="num col-sm-hide">${pm}</td>
               <td><span class="badge badge-verified">✓ settled</span></td>
             </tr>`;
           }).join('')}

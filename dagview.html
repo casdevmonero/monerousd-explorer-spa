@@ -429,7 +429,12 @@ animate();
   const fmt=n=>n?n.toLocaleString():'—';
   function showPop(b){ const isB=b.isBlue;
     pop.innerHTML='<button id="bpx" title="resume flow" style="position:absolute;top:9px;right:11px;cursor:pointer;border:0;background:transparent;color:#9a958c;font:700 14px Inter;line-height:1">✕</button><div style="font:700 14px JetBrains Mono,monospace;color:#FF6600;margin-bottom:5px">Batch #'+b.h+'</div><div style="margin-bottom:9px"><span style="font:700 9px Inter;letter-spacing:.5px;padding:3px 9px;border-radius:999px;'+(isB?'color:#FF6600;background:rgba(255,102,0,.13);border:1px solid rgba(255,102,0,.32)':'color:#ef4444;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3)')+'">'+(isB?'BLUE · selected':'RED ⊘ forfeited')+'</span></div><div style="font:500 10.5px JetBrains Mono,monospace;color:#b5b2ab;word-break:break-all;margin-bottom:9px">'+b.hash+'</div><div style="display:flex;gap:18px;color:#9a958c;font-size:11px"><span>↳ '+b.parents.length+' parent'+(b.parents.length!==1?'s':'')+'</span><span style="color:#FF8533;font-weight:600">'+fmt(b.txs)+' tx settled</span></div><div style="margin-top:10px;font-size:9.5px;color:#6f6c66;line-height:1.45">Paused on this batch · the DAG keeps forming behind · amounts stay private</div>';
-    pop.style.left=Math.max(14,innerWidth*0.5-160)+'px'; pop.style.top='116px'; pop.style.display='block';
+    if(innerWidth<=640){ // mobile: anchor as a bottom sheet, clear of the top search bar + keyboard, above the scrub/continue controls
+      pop.style.left='12px'; pop.style.right='12px'; pop.style.width='auto'; pop.style.maxWidth='none'; pop.style.top='auto'; pop.style.bottom='168px';
+    } else {
+      pop.style.right='auto'; pop.style.width=''; pop.style.maxWidth='320px'; pop.style.bottom='auto'; pop.style.left=Math.max(14,innerWidth*0.5-160)+'px'; pop.style.top='116px';
+    }
+    pop.style.display='block';
     document.getElementById('bpx').onclick=resume; }
   function focusOn(b){ if(!b)return; focusBlk=b; viewMode='focus'; showPop(b); }
   function resume(){ viewMode='live'; focusBlk=null; pop.style.display='none'; scr.value=100; }
@@ -438,7 +443,7 @@ animate();
     m2.x=(e.clientX/innerWidth)*2-1; m2.y=-(e.clientY/innerHeight)*2+1; ray.setFromCamera(m2,camera);
     const hit=ray.intersectObjects(blocks.map(b=>b.mesh).filter(Boolean),true)[0];
     if(hit){ const o=hit.object, b=blocks.find(x=>x.mesh===o||x.mesh===o.parent); if(b) focusOn(b); } }
-  sIn.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const b=blocksByNum.get(parseInt(sIn.value,10));
+  sIn.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.keyCode===13){ const b=blocksByNum.get(parseInt(sIn.value,10));
     if(b){ focusOn(b); sug.style.display='none'; sIn.blur(); } else { sIn.style.color='#ef4444'; setTimeout(function(){sIn.style.color='#f0eeea';},700); } } });
   // keystroke-based clickable autocomplete of matching batch numbers
   const sug=document.createElement('div'); sug.id='bsuggest';
@@ -451,7 +456,9 @@ animate();
       return '<div class="bsg" data-h="'+h+'" style="cursor:pointer;padding:8px 13px;display:flex;align-items:center;gap:9px;border-bottom:1px solid rgba(255,255,255,.05);font:600 12px JetBrains Mono,monospace;color:#f0eeea"><span style="width:7px;height:7px;border-radius:50%;background:'+c+';flex:0 0 auto"></span>Batch #'+h+'<span style="margin-left:auto;color:#6f6c66;font:500 10px Inter">'+(b.txs?b.txs.toLocaleString():'')+' tx</span></div>'; }).join('');
     const r=bar.getBoundingClientRect(); sug.style.left=r.left+'px'; sug.style.top=(r.bottom+7)+'px'; sug.style.width=r.width+'px'; sug.style.display='block';
     sug.querySelectorAll('.bsg').forEach(el=>{ el.onmouseenter=()=>{el.style.background='rgba(255,102,0,.13)';}; el.onmouseleave=()=>{el.style.background='transparent';};
-      el.onmousedown=ev=>{ ev.preventDefault(); const b=blocksByNum.get(parseInt(el.dataset.h,10)); if(b){ sIn.value=el.dataset.h; focusOn(b); sug.style.display='none'; sIn.blur(); } }; }); }
+      // pointerdown (not mousedown): fires natively on touch, BEFORE the input's blur-timeout
+      // hides this list, so tapping a suggestion reliably opens the block modal on mobile.
+      el.onpointerdown=ev=>{ ev.preventDefault(); const b=blocksByNum.get(parseInt(el.dataset.h,10)); if(b){ sIn.value=el.dataset.h; focusOn(b); sug.style.display='none'; sIn.blur(); } }; }); }
   sIn.addEventListener('input',renderSuggest); sIn.addEventListener('focus',renderSuggest);
   sIn.addEventListener('blur',()=>setTimeout(()=>{ sug.style.display='none'; },200));
   latBtn.addEventListener('click',resume);
