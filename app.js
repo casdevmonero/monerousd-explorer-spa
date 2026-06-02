@@ -13,7 +13,7 @@ import { primeIndex, searchLocal, groupByKind, initialsFor } from './lib/search-
 import { logoUrlFor } from './lib/registries.js';
 import { goldCheckHTML } from './lib/helpers.js';
 
-import { renderHome }       from './pages/home.js?v=232';
+import { renderHome }       from './pages/home.js?v=233';
 import { renderBlock }      from './pages/block.js';
 import { renderTx }         from './pages/tx.js';
 import { renderAddress }    from './pages/address.js';
