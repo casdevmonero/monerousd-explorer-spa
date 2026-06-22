@@ -170,8 +170,10 @@ body > header {
   top: 0;
   z-index: 100;
   height: var(--header-h);
-  background: rgba(10, 10, 10, 0.95);
+  background: rgba(10, 10, 10, 0.78);
   border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: saturate(1.5) blur(18px);
+  -webkit-backdrop-filter: saturate(1.5) blur(18px);
 }
 
 .header-inner {
@@ -1396,10 +1398,6 @@ footer a { color: var(--accent); }
   .source-pill { display: none; }
   table { font-size: 12px; }
   thead th, tbody td { padding: 9px 8px; }
-  /* On phones the 6-col block table overflows and the rightmost "Status / ✓ settled"
-     column gets cut off. Hide the two secondary columns (Verify, Proof) so the
-     essential columns + the settled badge fit; tapping a row still shows full detail. */
-  th.col-sm-hide, td.col-sm-hide { display: none; }
   .entity-grid { grid-template-columns: 1fr; }
   .detail-head .entity-logo { width: 44px; height: 44px; font-size: 14px; }
   .hero-stats { grid-template-columns: 1fr 1fr; }
@@ -1415,8 +1413,10 @@ footer a { color: var(--accent); }
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(10, 10, 10, 0.96);
+  background: rgba(10, 10, 10, 0.92);
   border-top: 1px solid var(--border-subtle);
+  backdrop-filter: saturate(1.5) blur(16px);
+  -webkit-backdrop-filter: saturate(1.5) blur(16px);
   z-index: 90;
   padding: 6px 8px env(safe-area-inset-bottom, 6px);
 }

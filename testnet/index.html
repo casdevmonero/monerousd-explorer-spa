@@ -9,13 +9,18 @@
   <meta name="color-scheme" content="dark">
 
   <!-- CSP — same-origin scripts, monerousd.org indexer family for
-       reads, ion.monerousd.org for token logos. No CDN, no eval. -->
+       reads, ion.monerousd.org for token logos. No CDN, no eval.
+       connect-src additionally allows the LOCAL DAG/PQ testnet daemon
+       (127.0.0.1:28080 / localhost) so a self-hosting reviewer reads
+       the live testnet chain DIRECTLY — no single operator trusted for
+       proof-bearing reads. These loopback origins carry no privacy
+       leak (they never leave the machine). -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src  'self';
     style-src   'self' 'unsafe-inline';
     img-src     'self' data: https://ion.monerousd.org;
-    connect-src 'self' https://*.monerousd.org;
+    connect-src 'self' https://*.monerousd.org http://127.0.0.1:28080 http://localhost:28080;
     base-uri    'self';
     form-action 'self';
     frame-ancestors 'none';
@@ -123,6 +128,7 @@
 
       <nav class="header-nav" aria-label="Primary navigation">
         <a href="#/"            class="header-nav-link">Home</a>
+        <a href="#/l2"          class="header-nav-link">Settlements</a>
         <a href="#/tokens"      class="header-nav-link">Tokens</a>
         <a href="#/wrapped"     class="header-nav-link">Wrapped</a>
         <a href="#/nfts"        class="header-nav-link">NFTs</a>
@@ -214,6 +220,5 @@
   </footer>
 
   <script type="module" src="/app.js?v=229"></script>
-  <script src="/dag-view.js?v=2"></script>
 </body>
 </html>
