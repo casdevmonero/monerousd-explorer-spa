@@ -9,19 +9,24 @@
   <meta name="color-scheme" content="dark">
 
   <!-- CSP — same-origin scripts, monerousd.org indexer family for
-       reads, ion.monerousd.org for token logos. No CDN, no eval. -->
+       reads, ion.monerousd.org for token logos. No CDN, no eval.
+       connect-src additionally allows the LOCAL DAG/PQ testnet daemon
+       (127.0.0.1:28080 / localhost) so a self-hosting reviewer reads
+       the live testnet chain DIRECTLY — no single operator trusted for
+       proof-bearing reads. These loopback origins carry no privacy
+       leak (they never leave the machine). -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src  'self';
     style-src   'self' 'unsafe-inline';
     img-src     'self' data: https://ion.monerousd.org;
-    connect-src 'self' https://*.monerousd.org;
+    connect-src 'self' https://*.monerousd.org http://127.0.0.1:28080 http://localhost:28080;
     base-uri    'self';
     form-action 'self';
     frame-ancestors 'none';
   ">
 
-  <link rel="stylesheet" href="styles/theme.css?v=5">
+  <link rel="stylesheet" href="styles/theme.css?v=229">
   <style>
     /* Boot loader — static MoneroUSD coin, orange ring orbits.
        Ported from the legacy explorer header (v1.2.132 redesign). */
@@ -214,7 +219,6 @@
     </div>
   </footer>
 
-  <script type="module" src="app.js?v=234"></script>
-  <script src="/dag-view.js?v=4"></script>
+  <script type="module" src="app.js?v=229"></script>
 </body>
 </html>

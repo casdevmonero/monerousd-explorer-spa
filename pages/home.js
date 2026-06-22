@@ -1,155 +1,458 @@
-// pages/home.js — Sovereign explorer home, driven by the LIVE L2 settlement engine
-// (benchmark.monerousd.org). Every number here is measured, not stale daemon height.
-// Click any block row for its live per-batch detail. CSP allows connect-src https://*.monerousd.org.
+// pages/home.js — Phantom-style hero + live network stats +
+// recent blocks + pager (Older/Newer).
+//
+// The hero stat tiles surface chain-derived facts only (height,
+// difficulty, hashrate, pool tx count). No address-balance lookups
+// — that would violate the privacy stance.
+//
+// "Older blocks" button bug fix (was broken in legacy explorer):
+// the pager now has an explicit `data-older-top` attribute that
+// stores the next page's top height, and an event handler bound
+// every render (not relying on a one-shot global hashchange).
 
 import { fmtUsd8, timeAgo } from '../lib/data-source.js';
+import { VERIFIED_TOKENS, WRAPPED_ASSETS, VERIFIED_ORGS } from '../lib/registries.js';
 
-const FLOOD_URL = 'https://benchmark.monerousd.org/api/benchmark/status';
+const RECENT_BLOCK_PAGE_SIZE = 12;
 
-async function fetchFlood() {
-  try {
-    const r = await fetch(FLOOD_URL, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
-    if (r.ok) return await r.json();
-  } catch (_) {}
-  return null;
+function fmtH(n) {
+  if (n == null || isNaN(n)) return '—';
+  n = Number(n);
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + ' GH/s';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + ' MH/s';
+  if (n >= 1e3) return (n / 1e3).toFixed(2) + ' KH/s';
+  return n.toFixed(0) + ' H/s';
+}
+function fmtD(n) {
+  if (n == null) return '—';
+  n = Number(n);
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + ' G';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + ' M';
+  if (n >= 1e3) return (n / 1e3).toFixed(2) + ' K';
+  return n.toFixed(0);
 }
 
-function nf(n)   { return (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('en-US'); }
-function fmtK(n) { n = Number(n || 0); if (n >= 1e9) return (n/1e9).toFixed(2)+'B'; if (n >= 1e6) return (n/1e6).toFixed(2)+'M'; if (n >= 1e3) return (n/1e3).toFixed(1)+'K'; return '' + Math.round(n); }
-function proofMB(flood) { return flood?.proofKB ? (Number(flood.proofKB) / 1024).toFixed(2) + ' MB' : '—'; }
-
-function heroTilesHTML(flood) {
-  const bits = flood?.securityBits || 100;
-  return `
-    <div class="hero-stat"><div class="hero-stat-label">Live private TPS</div><div class="hero-stat-value">${nf(flood?.tps)}</div><div class="hero-stat-sub">peak ${nf(flood?.peakTps)}</div></div>
-    <div class="hero-stat"><div class="hero-stat-label">Spends settled</div><div class="hero-stat-value">${flood?.spendsSettled != null ? fmtK(flood.spendsSettled) : '—'}</div><div class="hero-stat-sub">cumulative · private</div></div>
-    <div class="hero-stat"><div class="hero-stat-label">Block height</div><div class="hero-stat-value">${nf(flood?.blocks)}</div><div class="hero-stat-sub">latest L2 settlement block</div></div>
-    <div class="hero-stat"><div class="hero-stat-label">Spends / proof</div><div class="hero-stat-value">${nf(flood?.batchSize)}</div><div class="hero-stat-sub">one O(1)-verified proof</div></div>
-    <div class="hero-stat"><div class="hero-stat-label">Verify / proof</div><div class="hero-stat-value">${flood?.verifyMs != null ? Number(flood.verifyMs).toFixed(0) + ' ms' : '—'}</div><div class="hero-stat-sub">flat O(1) · ${bits}-bit PQ</div></div>
-    <div class="hero-stat"><div class="hero-stat-label">Full-chain sync</div><div class="hero-stat-value">&asymp; 2 MB</div><div class="hero-stat-sub">one recursive proof &middot; any device</div></div>`;
-}
-
-function heroHTML(flood) {
+function heroHTML(info) {
+  const height = Number(info?.height || 0);
+  const diff   = info?.difficulty;
+  const hash   = info?.hashrate || (diff ? Number(diff) / 120 : null);
+  const pool   = Number(info?.tx_pool_size || 0);
+  const net    = info?.testnet ? 'Testnet' : (info?.stagenet ? 'Stagenet' : 'Mainnet');
+  const ver    = info?.version ? ('v' + info.version) : '—';
   return `
     <header class="hero" aria-labelledby="hero-heading">
-      <span class="hero-eyebrow">MoneroUSD chain · privacy-first · live L2 settlement</span>
+      <span class="hero-eyebrow">MoneroUSD chain · privacy-first</span>
       <h1 id="hero-heading">Sovereign block explorer</h1>
-      <p>Private ZK-rollup settlement at production post-quantum security — every block folds thousands of
-         FCMP++ spends into one O(1)-verified proof, with amounts and addresses
-         <a href="#/privacy">concealed by design</a>. Click any block for its live detail.</p>
-      <div class="hero-stats" id="hero-stats">${heroTilesHTML(flood)}</div>
-    </header>`;
+      <p>Searches tokens, NFTs, wrapped assets, dark contracts, organizations and sovereign sites
+         — all chain-anchored, no operator can lie about state. Address-level activity stays
+         <a href="#/privacy">concealed by design</a>.</p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-label">Block height</div>
+          <div class="hero-stat-value">${height.toLocaleString('en-US')}</div>
+          <div class="hero-stat-sub">${net}</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Difficulty</div>
+          <div class="hero-stat-value">${fmtD(diff)}</div>
+          <div class="hero-stat-sub">LWMA target 120 s</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Hashrate</div>
+          <div class="hero-stat-value">${fmtH(hash)}</div>
+          <div class="hero-stat-sub">network estimate</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Mempool</div>
+          <div class="hero-stat-value">${pool}</div>
+          <div class="hero-stat-sub">pending txs</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Daemon</div>
+          <div class="hero-stat-value" style="font-size:1rem">${ver}</div>
+          <div class="hero-stat-sub">USDmd</div>
+        </div>
+      </div>
+    </header>
+  `;
 }
 
-// Block view, L2 batch format. Each row is clickable -> live per-batch detail modal.
-function batchesHTML(flood) {
-  const s = (flood && flood.settlements) || [];
-  if (!s.length) return '<div class="loading">Connecting to the live settlement engine…</div>';
-  const bs = Number(flood?.batchSize || 8192);
-  const pm = proofMB(flood);
-  const total = Number(flood?.blocks || 0);
-  const cum = Number(flood?.spendsSettled || 0);
-  const bits = flood?.securityBits || 100;
+function quickRowsHTML() {
+  const tokens   = VERIFIED_TOKENS.length;
+  const wrapped  = WRAPPED_ASSETS.length;
+  const orgs     = VERIFIED_ORGS.length;
+  return `
+    <section class="card interactive">
+      <div class="card-header">
+        <h2>Browse on-chain entities</h2>
+      </div>
+      <div class="entity-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
+        <a class="entity-card" href="#/tokens">
+          <div class="entity-head">
+            <div class="entity-logo">T</div>
+            <div><div class="entity-title">Tokens</div><div class="entity-sub">${tokens + ' verified'}</div></div>
+          </div>
+          <p class="entity-body">USDm and protocol-issued assets — auto-curated registry plus the live indexer feed.</p>
+        </a>
+        <a class="entity-card" href="#/wrapped">
+          <div class="entity-head">
+            <div class="entity-logo">W</div>
+            <div><div class="entity-title">Wrapped assets</div><div class="entity-sub">${wrapped + ' bridged'}</div></div>
+          </div>
+          <p class="entity-body">FROST-custodied wrappers for BTC, XMR, ETH, LTC, DOGE, SOL, ADA, BCH, ZEC, BNB + PSM stables.</p>
+        </a>
+        <a class="entity-card" href="#/nfts">
+          <div class="entity-head">
+            <div class="entity-logo">N</div>
+            <div><div class="entity-title">NFT collections</div><div class="entity-sub">browse</div></div>
+          </div>
+          <p class="entity-body">Privacy-preserving NFTs minted on chain — collection metadata, mint events, transfers.</p>
+        </a>
+        <a class="entity-card" href="#/contracts">
+          <div class="entity-head">
+            <div class="entity-logo">C</div>
+            <div><div class="entity-title">Dark Contracts</div><div class="entity-sub">DSOL bytecode</div></div>
+          </div>
+          <p class="entity-body">All DC_DEPLOY contracts — codeHash, ABI, recent calls. Bytecode is public; argv encrypted.</p>
+        </a>
+        <a class="entity-card" href="#/orgs">
+          <div class="entity-head">
+            <div class="entity-logo">O</div>
+            <div><div class="entity-title">Organizations</div><div class="entity-sub">${orgs + ' verified'}</div></div>
+          </div>
+          <p class="entity-body">Verified organizations and their full footprint: tokens, contracts, sites, contributions.</p>
+        </a>
+        <a class="entity-card" href="#/sites">
+          <div class="entity-head">
+            <div class="entity-logo">S</div>
+            <div><div class="entity-title">Sovereign sites</div><div class="entity-sub">SITE_PUBLISH</div></div>
+          </div>
+          <p class="entity-body">Chain-anchored static sites — every publish strengthens the reserve.</p>
+        </a>
+        <a class="entity-card" href="#/validators">
+          <div class="entity-head">
+            <div class="entity-logo">V</div>
+            <div><div class="entity-title">Validators</div><div class="entity-sub">bonded set</div></div>
+          </div>
+          <p class="entity-body">Bonded validators backing the FROST bridge — bond size, slash log, signal record.</p>
+        </a>
+        <a class="entity-card" href="#/privacy">
+          <div class="entity-head">
+            <div class="entity-logo">P</div>
+            <div><div class="entity-title">Privacy primer</div><div class="entity-sub">what's concealed?</div></div>
+          </div>
+          <p class="entity-body">Side-by-side: what's CONCEALED on MoneroUSD vs what's PUBLIC. Built for trust.</p>
+        </a>
+      </div>
+    </section>
+  `;
+}
+
+function blocksTableHTML(blocks) {
+  if (!blocks.length) return '<div class="empty">No blocks loaded yet.</div>';
   return `
     <div class="table-wrap">
       <table>
-        <thead><tr>
-          <th>Block</th><th class="num">Private spends</th><th class="num col-sm-hide">Verify</th>
-          <th class="num">Eff. TPS</th><th class="num col-sm-hide">Proof</th><th>Status</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th>Height</th>
+            <th>Time</th>
+            <th class="num">Txs</th>
+            <th>Reward</th>
+            <th class="num">Size</th>
+            <th class="num">Difficulty</th>
+          </tr>
+        </thead>
         <tbody>
-          ${s.slice(0, 12).map(b => {
-            const sp = Number(b.spends || bs);
-            const vm = Number(b.verifyMs || 0);
-            const tps = vm > 0 ? Math.round(sp / (vm / 1000)) : 0;
-            const data = encodeURIComponent(JSON.stringify({ blk: b.block, sp, vm, tps, pm, total, cum, bits }));
-            return `<tr class="batch-row" data-b="${data}" style="cursor:pointer">
-              <td><span style="color:var(--accent,#FF6600);font-weight:600">#${nf(b.block)}</span></td>
-              <td class="num">${nf(sp)}</td>
-              <td class="num col-sm-hide">${vm.toFixed(1)} ms</td>
-              <td class="num" style="color:var(--accent,#FF6600);font-weight:600">${nf(tps)}</td>
-              <td class="num col-sm-hide">${pm}</td>
-              <td><span class="badge badge-verified">✓ settled</span></td>
+          ${blocks.map(b => {
+            const h     = b.block_header || b;
+            const height = Number(h.height ?? 0);
+            const ts    = Number(h.timestamp || 0);
+            const size  = Number(h.block_size || h.block_weight || 0);
+            const diff  = Number(h.difficulty || 0);
+            const reward = h.reward != null ? fmtUsd8(h.reward) : '—';
+            const numTx = Number(h.num_txes || (Array.isArray(h.tx_hashes) ? h.tx_hashes.length : 0));
+            return `<tr>
+              <td><a href="#/block/${encodeURIComponent(height)}">${height.toLocaleString('en-US')}</a></td>
+              <td>${timeAgo(ts)}</td>
+              <td class="num">${numTx}</td>
+              <td>${reward} <span style="color:var(--text-muted);font-size:11px">USDm</span></td>
+              <td class="num">${(size / 1024).toFixed(2)} KB</td>
+              <td class="num">${fmtD(diff)}</td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
-    </div>`;
-}
-
-function showBatchModal(d) {
-  let m = document.getElementById('batch-modal');
-  if (!m) { m = document.createElement('div'); m.id = 'batch-modal'; document.body.appendChild(m); }
-  m.style.cssText = 'position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.64);padding:18px';
-  const rows = [
-    ['Private spends settled', nf(d.sp)],
-    ['Spends per proof', nf(d.sp) + ' &mdash; folded into one proof'],
-    ['Effective private TPS', '<span style="color:var(--accent,#FF6600);font-weight:700">' + nf(d.tps) + '</span>'],
-    ['Verify time', Number(d.vm).toFixed(1) + ' ms (flat O(1))'],
-    ['Proof size', d.pm + ' &middot; ' + d.bits + '-bit PQ STARK'],
-    ['Settlement', 'block #' + nf(d.blk) + ' &middot; ' + nf(d.total) + ' settled so far'],
-    ['Cumulative spends', nf(d.cum) + ' private'],
-    ['Privacy', 'amounts &middot; senders &middot; recipients all concealed'],
-    ['Status', '<span class="badge badge-verified">✓ settled</span>'],
-  ];
-  m.innerHTML = `<div style="max-width:470px;width:100%;background:#141414;border:1px solid var(--accent,#FF6600);border-radius:16px;padding:22px 24px;box-shadow:0 24px 70px rgba(0,0,0,.72);font:500 13px Inter,system-ui,sans-serif;color:#f0eeea">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-      <div style="font:700 19px 'JetBrains Mono',monospace;color:var(--accent,#FF6600)">Block #${nf(d.blk)}</div>
-      <button id="bm-x" style="cursor:pointer;border:0;background:transparent;color:#9a958c;font:700 18px Inter;line-height:1">✕</button>
     </div>
-    <div style="font-size:10.5px;color:#8c8a85;text-transform:uppercase;letter-spacing:1.4px;margin-bottom:14px">L2 settlement · post-quantum</div>
-    ${rows.map(r => `<div style="display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><span style="color:#9a958c">${r[0]}</span><span style="text-align:right">${r[1]}</span></div>`).join('')}
-    <div style="margin-top:13px;font-size:10.5px;color:#6f6c66;line-height:1.5">One recursive O(1)-verified proof settles all ${nf(d.sp)} spends. Verification time is flat regardless of batch size.</div>
-  </div>`;
-  m.style.display = 'flex';
-  const close = () => { m.style.display = 'none'; };
-  m.querySelector('#bm-x').onclick = close;
-  m.onclick = e => { if (e.target === m) close(); };
+  `;
 }
 
-let _homeToken = 0;
+function pagerHTML(currentTop, tip) {
+  const tipTop       = Math.max(0, tip - 1);
+  const newerDisabled = currentTop >= tipTop;
+  const older        = currentTop - RECENT_BLOCK_PAGE_SIZE;
+  const olderDisabled = older < 0;
+  const newerTop     = Math.min(tipTop, currentTop + RECENT_BLOCK_PAGE_SIZE);
+  const bottom = Math.max(0, currentTop - RECENT_BLOCK_PAGE_SIZE + 1);
+  return `
+    <div class="pager">
+      <button class="btn btn-ghost btn-sm" id="newer-btn"
+              data-newer-top="${newerTop}" ${newerDisabled ? 'disabled' : ''}>
+        ← Newer
+      </button>
+      <span class="pager-info">Blocks ${bottom.toLocaleString('en-US')} – ${currentTop.toLocaleString('en-US')}</span>
+      <button class="btn btn-primary btn-sm" id="older-btn"
+              data-older-top="${older}" ${olderDisabled ? 'disabled' : ''}>
+        Older →
+      </button>
+    </div>
+  `;
+}
 
 export async function renderHome(ctx) {
-  const { view } = ctx;
-  const token = ++_homeToken;
-  const alive = () => token === _homeToken;
+  const { ds, view } = ctx;
 
-  view.innerHTML = heroHTML(null) + `
+  // Phase 1 — paint hero + recent-blocks + recent-txs skeletons.
+  // "Browse on-chain entities" tile row removed per user request —
+  // discovery happens via the header search dropdown + nav.
+  view.innerHTML = heroHTML({}) + `
     <section class="card">
       <div class="card-header">
-        <h2>Recent blocks · L2 settlement</h2>
-        <div class="card-action" id="blocks-action">connecting…</div>
+        <h2>Recent blocks</h2>
+        <div class="card-action" id="blocks-action">Loading…</div>
       </div>
-      <div id="blocks-body"><div class="loading">Loading live settlement blocks…</div></div>
+      <div id="blocks-body"><div class="loading">Loading recent blocks…</div></div>
     </section>
     <section class="card">
-      <div class="card-header"><h2>How settlement works</h2></div>
-      <div style="padding:4px 2px;color:var(--text-muted,#9a958c);font-size:13.5px;line-height:1.6">
-        Each block above is an <strong>L2 settlement batch</strong>: thousands of confidential FCMP++ spends folded
-        into a single recursive proof, verified in <strong>flat O(1) time</strong> at production post-quantum
-        security. Effective private throughput = spends ÷ verify time. Recursion folds the <strong>entire chain
-        into one constant-size proof</strong>, so a node verifies all history from <strong>~2 MB</strong> — run it
-        from any device, no matter how long the chain gets. Proofs are ~2 MB (not Mina's few KB) because they're
-        <strong>hash-based STARKs</strong> — quantum-secure, rather than pre-quantum SNARKs.
-        <a href="#/l2">See the full settlement stream →</a>
+      <div class="card-header">
+        <h2>Recent transactions</h2>
+        <div class="card-action" id="txs-action">Loading…</div>
       </div>
-    </section>`;
+      <div id="txs-body"><div class="loading">Loading recent transactions…</div></div>
+    </section>
+  `;
 
-  // one delegated handler — survives the live re-renders below
+  // Wire a Refresh-on-click on the Updated header — users on slow
+  // connections want a manual retry button.
   view.addEventListener('click', e => {
-    const row = e.target.closest && e.target.closest('.batch-row');
-    if (row && row.dataset.b) { try { showBatchModal(JSON.parse(decodeURIComponent(row.dataset.b))); } catch (_) {} }
+    if (e.target.closest('#txs-action')) {
+      e.preventDefault();
+      paintRecentTxs(ctx, [], Number(info?.height || 1) - 1, Number(info?.height || 0));
+    }
+    if (e.target.closest('#blocks-action')) {
+      e.preventDefault();
+      (async () => {
+        const newInfo = await ds.callDaemon('get_info').catch(() => null);
+        const newTip = Number(newInfo?.height || 0);
+        const top = Math.max(0, newTip - 1);
+        const fresh = await fetchRecentBlocks(ds, top, RECENT_BLOCK_PAGE_SIZE);
+        paintBlocks(ctx, fresh, top, newTip);
+        paintRecentTxs(ctx, fresh, top, newTip);
+      })();
+    }
   });
 
-  async function tick() {
-    if (!alive()) return;
-    const flood = await fetchFlood();
-    if (!alive()) return;
-    const hs = view.querySelector('#hero-stats'); if (hs) hs.innerHTML = heroTilesHTML(flood);
-    const bb = view.querySelector('#blocks-body'); if (bb) bb.innerHTML = batchesHTML(flood);
-    const act = view.querySelector('#blocks-action');
-    if (act) act.textContent = flood && flood.running ? `live · updated ${new Date().toLocaleTimeString()}` : 'settlement engine offline';
+  // Phase 2 — fetch get_info + paint real hero.
+  let info = {};
+  try { info = await ds.callDaemon('get_info'); } catch (_) {}
+  const heroNode = view.querySelector('.hero');
+  if (heroNode) heroNode.outerHTML = heroHTML(info);
+
+  const tip = Number(info?.height || 0);
+  const initialTop = Math.max(0, tip - 1);
+
+  // Phase 3 — fetch the visible-window blocks (table).
+  const blocks = await fetchRecentBlocks(ds, initialTop, RECENT_BLOCK_PAGE_SIZE);
+  paintBlocks(ctx, blocks, initialTop, tip);
+
+  // Phase 4 — populate Recent transactions. Start with the visible
+  // window; if it's all coinbase, walk further back so the section
+  // shows real activity instead of "no txs in last N blocks".
+  paintRecentTxs(ctx, blocks, initialTop, tip);
+}
+
+// Fetches N recent blocks starting at `top` (descending).
+// Returns whatever it got — partial windows are ok.
+async function fetchRecentBlocks(ds, top, count) {
+  const out = [];
+  for (let h = top; h > top - count && h >= 0; h--) {
+    try {
+      const b = await ds.getBlockByHeight(h);
+      out.push(b);
+    } catch (_) { break; }
   }
-  await tick();
-  (function loop() { if (!alive()) return; setTimeout(async () => { await tick(); loop(); }, 2500); })();
+  return out;
+}
+
+// Paints the blocks-table + pager into #blocks-body, then wires
+// Older/Newer click handlers (re-bound on every render so the
+// pager keeps working after every page advance — this was the
+// "Older blocks button broken" bug in the legacy explorer).
+function paintBlocks(ctx, blocks, top, tip) {
+  const { ds, view } = ctx;
+  const blocksBody = view.querySelector('#blocks-body');
+  const action     = view.querySelector('#blocks-action');
+  if (action) action.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  if (!blocksBody) return;
+  blocksBody.innerHTML = blocksTableHTML(blocks) + pagerHTML(top, tip);
+
+  const older = blocksBody.querySelector('#older-btn');
+  const newer = blocksBody.querySelector('#newer-btn');
+  if (older && !older.disabled) {
+    older.addEventListener('click', async () => {
+      const next = Number(older.dataset.olderTop);
+      if (!Number.isFinite(next) || next < 0) return;
+      blocksBody.innerHTML = '<div class="loading">Loading…</div>';
+      const win = await fetchRecentBlocks(ds, next, RECENT_BLOCK_PAGE_SIZE);
+      paintBlocks(ctx, win, next, tip);
+    });
+  }
+  if (newer && !newer.disabled) {
+    newer.addEventListener('click', async () => {
+      const next = Number(newer.dataset.newerTop);
+      if (!Number.isFinite(next)) return;
+      blocksBody.innerHTML = '<div class="loading">Loading…</div>';
+      const win = await fetchRecentBlocks(ds, next, RECENT_BLOCK_PAGE_SIZE);
+      paintBlocks(ctx, win, next, tip);
+    });
+  }
+}
+
+// Recent transactions card — pulls the tx-hash list out of recent
+// blocks. To avoid the legacy "200-sequential-getBlock" walk that
+// made the section flicker between empty and full, we now batch the
+// deep-lookback fetch in PARALLEL chunks and cap the total scan at
+// RECENT_TX_DEEP_LOOKBACK blocks (50). Each chunk of 10 blocks
+// fetches concurrently; we early-exit as soon as RECENT_TX_LIMIT
+// hashes have been collected. Worst case: 5 round-trips of 10
+// parallel fetches each → ~10 s on cold network.
+//
+// The `_renderToken` token at top of every render disambiguates
+// in-flight repaints from a new render started by a route change —
+// if paintRecentTxs is mid-fetch and the user navigates away, the
+// stale callback no-ops instead of overwriting the new page.
+const RECENT_TX_LIMIT = 16;
+const RECENT_TX_DEEP_LOOKBACK = 200;  // total blocks to walk back
+const RECENT_TX_CHUNK = 10;           // blocks per parallel batch
+
+let _recentTxsToken = 0;
+
+async function paintRecentTxs(ctx, visibleBlocks, visibleTop, tip) {
+  const { ds, view } = ctx;
+  const token = ++_recentTxsToken;
+  const stillCurrent = () => token === _recentTxsToken;
+
+  const body = view.querySelector('#txs-body');
+  const action = view.querySelector('#txs-action');
+  if (!body) return;
+
+  // First pass — use the visible window.
+  const items = collectTxHashes(visibleBlocks, RECENT_TX_LIMIT);
+
+  // If the visible window is all coinbase, walk further back in
+  // PARALLEL chunks. Early-exit once we have enough hashes.
+  if (!items.length && visibleTop > 0) {
+    let scanFrom = visibleTop - visibleBlocks.length;
+    const hardFloor = Math.max(0, visibleTop + 1 - RECENT_TX_DEEP_LOOKBACK);
+    body.innerHTML = `<div class="loading">Scanning recent blocks for user transactions…</div>`;
+    while (items.length < RECENT_TX_LIMIT && scanFrom >= hardFloor) {
+      if (!stillCurrent()) return; // user navigated away — abort
+      const heights = [];
+      for (let i = 0; i < RECENT_TX_CHUNK && scanFrom - i >= hardFloor; i++) {
+        heights.push(scanFrom - i);
+      }
+      const chunk = await Promise.all(heights.map(h =>
+        ds.getBlockByHeight(h).catch(() => null)
+      ));
+      const validBlocks = chunk.filter(Boolean);
+      items.push(...collectTxHashes(validBlocks, RECENT_TX_LIMIT - items.length));
+      scanFrom -= RECENT_TX_CHUNK;
+    }
+  }
+
+  if (!stillCurrent()) return;
+
+  if (!items.length) {
+    if (action) action.textContent = 'no tx activity found';
+    body.innerHTML = `
+      <div class="empty">
+        No user transactions in the last
+        ${Math.min(RECENT_TX_DEEP_LOOKBACK, visibleTop + 1).toLocaleString('en-US')} blocks
+        (coinbase only).
+        <div class="hint">When wallets transact, their txs land here.
+          The recent-blocks table above still updates every refresh.</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Batch fetch tx bodies — one RPC call for the whole list.
+  let txs = [];
+  try {
+    const r = await ds.getTransactions(items.map(i => i.hash));
+    txs = r?.txs || [];
+  } catch (_) { txs = []; }
+
+  if (!stillCurrent()) return;
+  if (action) action.textContent = `${items.length} most recent`;
+  body.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Hash</th>
+            <th class="num">Block</th>
+            <th>Age</th>
+            <th class="num">Fee</th>
+            <th class="num">Size</th>
+            <th>Privacy</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((it, i) => {
+            const tx = txs[i] || {};
+            const j = tx.as_json ? safeJson(tx.as_json) : tx;
+            const ty = j?.rct_signatures?.type;
+            const rsp = j?.rctsig_prunable || tx?.rctsig_prunable;
+            const isFcmp = (ty === 7 || ty === 8 || ty === 11)
+                        || (rsp && (rsp.fcmp_proof || rsp.fcmp_tree_root || rsp.fcmp_layers));
+            const feeAtomic = j?.rct_signatures?.txnFee ?? tx.fee ?? 0;
+            return `
+              <tr>
+                <td class="mono"><a href="#/tx/${encodeURIComponent(it.hash)}">${it.hash.slice(0, 16)}…</a></td>
+                <td class="num"><a href="#/block/${encodeURIComponent(it.block_height)}">${it.block_height.toLocaleString('en-US')}</a></td>
+                <td>${timeAgo(it.block_timestamp)}</td>
+                <td class="num">${fmtUsd8(feeAtomic)} <span style="color:var(--text-muted);font-size:11px">USDm</span></td>
+                <td class="num">${tx.size ? (tx.size / 1024).toFixed(2) + ' KB' : '—'}</td>
+                <td>${isFcmp ? '<span class="badge badge-verified">FCMP++</span>' : '<span class="badge badge-muted">RingCT</span>'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function safeJson(s) { try { return JSON.parse(s); } catch (_) { return {}; } }
+
+// Walks a block list (newest first) and returns up to `limit`
+// { hash, block_height, block_timestamp } tuples. Stops as soon
+// as the limit is hit so we don't process the whole window when
+// the first block already covers it.
+function collectTxHashes(blocks, limit) {
+  const out = [];
+  for (const b of blocks) {
+    const h = b?.block_header || b;
+    const hashes = b?.tx_hashes || [];
+    for (const tx of hashes) {
+      out.push({
+        hash: tx,
+        block_height: Number(h.height || 0),
+        block_timestamp: Number(h.timestamp || 0),
+      });
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
 }
